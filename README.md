@@ -1,6 +1,6 @@
 # AS24Net Server
 
-[![CI](https://github.com/jskrobak/-AS24Net-/actions/workflows/ci.yml/badge.svg)](https://github.com/jskrobak/-AS24Net-/actions/workflows/ci.yml)
+[![CI](https://github.com/jskrobak/AS24Net/actions/workflows/ci.yml/badge.svg)](https://github.com/jskrobak/AS24Net/actions/workflows/ci.yml)
 
 AS2 (Applicability Statement 2, [RFC 4130](https://www.rfc-editor.org/rfc/rfc4130)) server and client with a Blazor
 administration UI. Runs on .NET 10 with PostgreSQL. A sibling of [Oftp4Net](https://github.com/jskrobak/Oftp4Net):

@@ -14,6 +14,7 @@ public static class HealthCheckRegistration
     public static IServiceCollection AddAs2HealthChecks(this IServiceCollection services)
     {
         services.AddSingleton<HealthMonitor>();
+        services.AddSingleton<SendQueueReportService>();
         services.AddSingleton<IHealthCheckPublisher>(sp => sp.GetRequiredService<HealthMonitor>());
         services.Configure<HealthCheckPublisherOptions>(options =>
         {

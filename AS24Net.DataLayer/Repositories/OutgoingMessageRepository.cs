@@ -93,6 +93,40 @@ public class OutgoingMessageRepository(
                     || (m.Status == OutgoingStatus.NotDelivered && m.DeliveredDate >= failedSince))
         .CountAsync(cancellationToken);
 
+    public async Task<List<SendQueuePartnerState>> GetStateByPartnerAsync(CancellationToken cancellationToken = default)
+    {
+        var counts = await Data
+            .Where(m => m.Status == OutgoingStatus.New || m.Status == OutgoingStatus.Error || m.Status == OutgoingStatus.Failed
+                        || m.Status == OutgoingStatus.NotDelivered || m.Status == OutgoingStatus.Sent)
+            .GroupBy(m => m.PartnerId)
+            .Select(g => new
+            {
+                PartnerId = g.Key,
+                Waiting = g.Count(m => m.Status == OutgoingStatus.New || m.Status == OutgoingStatus.Error),
+                OldestWaiting = g.Where(m => m.Status == OutgoingStatus.New || m.Status == OutgoingStatus.Error).Min(m => (DateTime?)m.Created),
+                Failed = g.Count(m => m.Status == OutgoingStatus.Failed || m.Status == OutgoingStatus.NotDelivered),
+                AwaitingMdn = g.Count(m => m.Status == OutgoingStatus.Sent),
+                OldestSent = g.Where(m => m.Status == OutgoingStatus.Sent).Min(m => m.SentDate),
+            })
+            .ToListAsync(cancellationToken);
+
+        // The error of the message that failed last, among those still waiting or failed for good.
+        var errors = await Data
+            .Where(m => (m.Status == OutgoingStatus.Error || m.Status == OutgoingStatus.Failed || m.Status == OutgoingStatus.NotDelivered)
+                        && m.LastErrorDate != null)
+            .GroupBy(m => m.PartnerId)
+            .Select(g => g.OrderByDescending(m => m.LastErrorDate).Select(m => new { m.PartnerId, m.LastError, m.LastErrorDate }).First())
+            .ToListAsync(cancellationToken);
+        var errorByPartner = errors.ToDictionary(e => e.PartnerId);
+
+        return counts
+            .Select(c => errorByPartner.TryGetValue(c.PartnerId, out var error)
+                ? new SendQueuePartnerState(c.PartnerId, c.Waiting, c.OldestWaiting, c.Failed, c.AwaitingMdn, c.OldestSent,
+                    error.LastError, error.LastErrorDate)
+                : new SendQueuePartnerState(c.PartnerId, c.Waiting, c.OldestWaiting, c.Failed, c.AwaitingMdn, c.OldestSent, null, null))
+            .ToList();
+    }
+
     public Task<List<OutgoingMessage>> GetFinishedAsync(DateTime createdBefore, int take, CancellationToken cancellationToken = default) => Data
         .AsNoTracking()
         .Where(m => (m.Status == OutgoingStatus.Delivered || m.Status == OutgoingStatus.NotDelivered) && m.Created < createdBefore)

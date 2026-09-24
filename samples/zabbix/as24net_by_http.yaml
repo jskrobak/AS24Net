@@ -1,0 +1,520 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+    - uuid: 96a0a7ad7b69472ba8a4d5b40b4b217f
+      name: Templates/Applications
+  templates:
+    - uuid: 991b5a14d2024f309821c8203416aa6b
+      template: 'AS24Net by HTTP'
+      name: 'AS24Net by HTTP'
+      description: |
+        AS24Net AS2 server: the state of the server, its health checks and the send queue of every partner.
+        
+        Set {$AS2.URL} to the address of the server (without a trailing slash) and {$AS2.TOKEN} to an API token
+        from Settings / API tokens. Thresholds can be set for one partner with its AS2 name as context, e.g.
+        {$AS2.WAITING.MAX.AGE:"PARTNER-AS2"}=4h.
+      groups:
+        - name: Templates/Applications
+      items:
+        - uuid: 21d69b2d2fd548d5bc18e4854ea24cbc
+          name: 'AS24Net: State'
+          type: HTTP_AGENT
+          key: as2.health.ready
+          delay: 1m
+          history: 31d
+          trends: 365d
+          value_type: UNSIGNED
+          description: 'Overall state from /health/ready: database, storage and send service.'
+          valuemap:
+            name: 'AS24Net health state'
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - 'return {Healthy: 0, Degraded: 1, Unhealthy: 2}[value.trim()];'
+          timeout: 10s
+          url: '{$AS2.URL}/health/ready'
+          status_codes: '200,503'
+          tags:
+            - tag: component
+              value: health
+          triggers:
+            - uuid: fa5338a32af14ffa8b4a94c147220b3c
+              expression: 'last(/AS24Net by HTTP/as2.health.ready)=2'
+              name: 'AS24Net: Server is unhealthy'
+              priority: HIGH
+              description: 'Database, storage or the send service fails. The details are in the health check items.'
+              tags:
+                - tag: scope
+                  value: availability
+            - uuid: b95d04e6579f4435b4a70e0e05368743
+              expression: 'nodata(/AS24Net by HTTP/as2.health.ready,{$AS2.NODATA})=1'
+              name: 'AS24Net: Server does not answer for {$AS2.NODATA}'
+              priority: HIGH
+              description: 'The server is down or cannot be reached; it cannot report anything itself.'
+              tags:
+                - tag: scope
+                  value: availability
+        - uuid: 97faa901f80a4e8d9158697eb7d5c912
+          name: 'AS24Net: Health details'
+          type: HTTP_AGENT
+          key: as2.health.details
+          delay: 5m
+          history: '0'
+          trends: '0'
+          value_type: TEXT
+          description: 'All health checks from /health/details, the source of the discovered checks.'
+          timeout: 10s
+          url: '{$AS2.URL}/health/details'
+          status_codes: '200,503'
+          headers:
+            - name: Authorization
+              value: 'Bearer {$AS2.TOKEN}'
+          tags:
+            - tag: component
+              value: raw
+        - uuid: 6395ca17ed604e61af56cb5a90183a20
+          name: 'AS24Net: Database size'
+          type: DEPENDENT
+          key: as2.database.size
+          delay: '0'
+          history: 31d
+          trends: 365d
+          value_type: UNSIGNED
+          units: B
+          description: 'Size of the database; the retention keeps it within bounds.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.checks.database.data.sizeBytes
+          master_item:
+            key: as2.health.details
+          tags:
+            - tag: component
+              value: database
+        - uuid: 577fe9f516cc4ceaab6cbb753f23033e
+          name: 'AS24Net: Transfer log size'
+          type: DEPENDENT
+          key: as2.database.size.events
+          delay: '0'
+          history: 31d
+          trends: 365d
+          value_type: UNSIGNED
+          units: B
+          description: 'Size of the transfer log table with its indexes, usually the largest one.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.checks.database.data.TransferEventsBytes
+              error_handler: DISCARD_VALUE
+          master_item:
+            key: as2.health.details
+          tags:
+            - tag: component
+              value: database
+        - uuid: 523ab458383d49328d0662a8309fa71d
+          name: 'AS24Net: Send queue'
+          type: HTTP_AGENT
+          key: as2.send-queue
+          delay: 5m
+          history: '0'
+          trends: '0'
+          value_type: TEXT
+          description: 'The send queue in numbers from /health/send-queue, the source of the queue items.'
+          timeout: 10s
+          url: '{$AS2.URL}/health/send-queue'
+          headers:
+            - name: Authorization
+              value: 'Bearer {$AS2.TOKEN}'
+          tags:
+            - tag: component
+              value: raw
+        - uuid: ad433f69a0b34fae81f5d8e658b3aa3d
+          name: 'AS24Net: Messages waiting'
+          type: DEPENDENT
+          key: as2.queue.waiting
+          delay: '0'
+          history: 31d
+          value_type: UNSIGNED
+          description: 'Messages new or waiting for a retry, all partners.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.waiting
+          master_item:
+            key: as2.send-queue
+          tags:
+            - tag: component
+              value: queue
+          triggers:
+            - uuid: cf0a6db9b9db46c48436cf7e1d91f0d5
+              expression: 'nodata(/AS24Net by HTTP/as2.queue.waiting,{$AS2.NODATA})=1'
+              name: 'AS24Net: No data about the send queue for {$AS2.NODATA}'
+              priority: AVERAGE
+              description: 'The send queue cannot be read, e.g. because the API token expired or was disabled.'
+              dependencies:
+                - name: 'AS24Net: Server does not answer for {$AS2.NODATA}'
+                  expression: 'nodata(/AS24Net by HTTP/as2.health.ready,{$AS2.NODATA})=1'
+              tags:
+                - tag: scope
+                  value: availability
+        - uuid: 0e8ab84a38ef456487d36d34e44519f2
+          name: 'AS24Net: Oldest waiting message'
+          type: DEPENDENT
+          key: as2.queue.waiting.age
+          delay: '0'
+          history: 31d
+          value_type: UNSIGNED
+          units: s
+          description: 'How long the oldest message waiting to be sent has been in the queue, all partners.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.oldestWaitingMinutes
+            - type: MULTIPLIER
+              parameters:
+                - '60'
+          master_item:
+            key: as2.send-queue
+          tags:
+            - tag: component
+              value: queue
+        - uuid: b3adcc999b5d4376b16cc7f82c99d4a9
+          name: 'AS24Net: Messages failed'
+          type: DEPENDENT
+          key: as2.queue.failed
+          delay: '0'
+          history: 31d
+          value_type: UNSIGNED
+          description: 'Messages that failed for good or were not delivered (negative MDN) and wait for the administrator, all partners.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.failed
+          master_item:
+            key: as2.send-queue
+          tags:
+            - tag: component
+              value: queue
+        - uuid: 86097b7b4e684800bd03b04bcba39690
+          name: 'AS24Net: Messages awaiting MDN'
+          type: DEPENDENT
+          key: as2.queue.mdn
+          delay: '0'
+          history: 31d
+          value_type: UNSIGNED
+          description: 'Messages sent whose asynchronous MDN has not arrived yet, all partners.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.awaitingMdn
+          master_item:
+            key: as2.send-queue
+          tags:
+            - tag: component
+              value: queue
+        - uuid: 93bf52742c704dff8b62455e72a4a1e4
+          name: 'AS24Net: Oldest message awaiting MDN'
+          type: DEPENDENT
+          key: as2.queue.mdn.age
+          delay: '0'
+          history: 31d
+          value_type: UNSIGNED
+          units: s
+          description: 'How long ago the oldest message still awaiting its asynchronous MDN was sent, all partners.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.oldestAwaitingMdnMinutes
+            - type: MULTIPLIER
+              parameters:
+                - '60'
+          master_item:
+            key: as2.send-queue
+          tags:
+            - tag: component
+              value: queue
+      discovery_rules:
+        - uuid: 9383f52d6ef4409e8aa786916723823b
+          name: 'Health checks'
+          type: DEPENDENT
+          key: as2.checks.discovery
+          delay: '0'
+          description: 'The health checks of /health/details.'
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var checks = JSON.parse(value).checks;
+                  var result = [];
+                  for (var name in checks)
+                      result.push({'{#CHECK}': name, '{#TAGS}': checks[name].tags.join(',')});
+                  return JSON.stringify(result);
+          master_item:
+            key: as2.health.details
+          item_prototypes:
+            - uuid: 1fb9427025394233829ee5531dff812b
+              name: 'AS24Net: Check {#CHECK}'
+              type: DEPENDENT
+              key: 'as2.check.state[{#CHECK}]'
+              delay: '0'
+              history: 31d
+              trends: 365d
+              value_type: UNSIGNED
+              description: 'State of the health check {#CHECK} ({#TAGS}).'
+              valuemap:
+                name: 'AS24Net health state'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.checks[''{#CHECK}''].status'
+                - type: JAVASCRIPT
+                  parameters:
+                    - 'return {Healthy: 0, Degraded: 1, Unhealthy: 2}[value];'
+              master_item:
+                key: as2.health.details
+              tags:
+                - tag: check
+                  value: '{#CHECK}'
+                - tag: component
+                  value: health
+            - uuid: 325e57d9714e41b3bf5c227107156a2c
+              name: 'AS24Net: Check {#CHECK} description'
+              type: DEPENDENT
+              key: 'as2.check.description[{#CHECK}]'
+              delay: '0'
+              history: 7d
+              value_type: TEXT
+              description: 'What the health check {#CHECK} found.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.checks[''{#CHECK}''].description'
+                  error_handler: DISCARD_VALUE
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: as2.health.details
+              tags:
+                - tag: check
+                  value: '{#CHECK}'
+                - tag: component
+                  value: health
+          trigger_prototypes:
+            - uuid: 0e28b43b75ff47f2bf4aa1f7f437a60a
+              expression: 'last(/AS24Net by HTTP/as2.check.state[{#CHECK}])=2 and length(last(/AS24Net by HTTP/as2.check.description[{#CHECK}]))>=0'
+              name: 'AS24Net: Health check {#CHECK} is unhealthy'
+              opdata: '{ITEM.LASTVALUE2}'
+              priority: HIGH
+              tags:
+                - tag: scope
+                  value: availability
+            - uuid: 83b2ea407bf04f89a81c5c9158a931c8
+              expression: 'last(/AS24Net by HTTP/as2.check.state[{#CHECK}])=1 and length(last(/AS24Net by HTTP/as2.check.description[{#CHECK}]))>=0'
+              name: 'AS24Net: Health check {#CHECK} is degraded'
+              opdata: '{ITEM.LASTVALUE2}'
+              priority: WARNING
+              tags:
+                - tag: scope
+                  value: notice
+        - uuid: 03a152320cc049189bce4ddcc5808e70
+          name: 'Partners'
+          type: DEPENDENT
+          key: as2.partners.discovery
+          delay: '0'
+          description: 'The partners of /health/send-queue; every partner is listed, also with an empty queue.'
+          lifetime: 7d
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.partners
+          master_item:
+            key: as2.send-queue
+          lld_macro_paths:
+            - lld_macro: '{#PARTNER}'
+              path: $.partner
+            - lld_macro: '{#AS2ID}'
+              path: $.as2Id
+          item_prototypes:
+            - uuid: e5b6937d95284e018022df3ef6b904f4
+              name: 'AS24Net: {#PARTNER}: Messages waiting'
+              type: DEPENDENT
+              key: 'as2.partner.waiting["{#AS2ID}"]'
+              delay: '0'
+              history: 31d
+              value_type: UNSIGNED
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.partners[?(@.as2Id==''{#AS2ID}'')].waiting.first()'
+              master_item:
+                key: as2.send-queue
+              tags:
+                - tag: component
+                  value: queue
+                - tag: partner
+                  value: '{#PARTNER}'
+            - uuid: 05287d5fa73f45cfa8b610ed3f7abcd9
+              name: 'AS24Net: {#PARTNER}: Oldest waiting message'
+              type: DEPENDENT
+              key: 'as2.partner.waiting.age["{#AS2ID}"]'
+              delay: '0'
+              history: 31d
+              value_type: UNSIGNED
+              units: s
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.partners[?(@.as2Id==''{#AS2ID}'')].oldestWaitingMinutes.first()'
+                - type: MULTIPLIER
+                  parameters:
+                    - '60'
+              master_item:
+                key: as2.send-queue
+              tags:
+                - tag: component
+                  value: queue
+                - tag: partner
+                  value: '{#PARTNER}'
+            - uuid: dca50ce3692a4ebe90bf738f0f4cdeaa
+              name: 'AS24Net: {#PARTNER}: Messages failed'
+              type: DEPENDENT
+              key: 'as2.partner.failed["{#AS2ID}"]'
+              delay: '0'
+              history: 31d
+              value_type: UNSIGNED
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.partners[?(@.as2Id==''{#AS2ID}'')].failed.first()'
+              master_item:
+                key: as2.send-queue
+              tags:
+                - tag: component
+                  value: queue
+                - tag: partner
+                  value: '{#PARTNER}'
+            - uuid: a33b1db1d4894b36952e7cbf6032d747
+              name: 'AS24Net: {#PARTNER}: Messages awaiting MDN'
+              type: DEPENDENT
+              key: 'as2.partner.mdn["{#AS2ID}"]'
+              delay: '0'
+              history: 31d
+              value_type: UNSIGNED
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.partners[?(@.as2Id==''{#AS2ID}'')].awaitingEndResponse.first()'
+              master_item:
+                key: as2.send-queue
+              tags:
+                - tag: component
+                  value: queue
+                - tag: partner
+                  value: '{#PARTNER}'
+            - uuid: b86e409315744a1b93d3d3472db018e1
+              name: 'AS24Net: {#PARTNER}: Oldest message awaiting MDN'
+              type: DEPENDENT
+              key: 'as2.partner.mdn.age["{#AS2ID}"]'
+              delay: '0'
+              history: 31d
+              value_type: UNSIGNED
+              units: s
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.partners[?(@.as2Id==''{#AS2ID}'')].oldestAwaitingEndResponseMinutes.first()'
+                - type: MULTIPLIER
+                  parameters:
+                    - '60'
+              master_item:
+                key: as2.send-queue
+              tags:
+                - tag: component
+                  value: queue
+                - tag: partner
+                  value: '{#PARTNER}'
+            - uuid: 4db550dbeab04d91881312a522884d0d
+              name: 'AS24Net: {#PARTNER}: Last error'
+              type: DEPENDENT
+              key: 'as2.partner.error["{#AS2ID}"]'
+              delay: '0'
+              history: 7d
+              value_type: TEXT
+              description: 'The error of the message that failed last, among those waiting or failed; - when there is none.'
+              preprocessing:
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      var partner = JSON.parse(value).partners.filter(function (p) { return p.as2Id == '{#AS2ID}'; })[0];
+                      return partner && partner.lastError ? partner.lastError : '-';
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: as2.send-queue
+              tags:
+                - tag: component
+                  value: queue
+                - tag: partner
+                  value: '{#PARTNER}'
+          trigger_prototypes:
+            - uuid: 8cdccf51d5c04e5ebb944256802aabbc
+              expression: 'last(/AS24Net by HTTP/as2.partner.waiting.age["{#AS2ID}"])>{$AS2.WAITING.MAX.AGE:"{#AS2ID}"} and length(last(/AS24Net by HTTP/as2.partner.error["{#AS2ID}"]))>=0'
+              name: 'AS24Net: A message for {#PARTNER} waits longer than {$AS2.WAITING.MAX.AGE:"{#AS2ID}"}'
+              opdata: 'Waiting: {ITEM.LASTVALUE1}, last error: {ITEM.LASTVALUE2}'
+              priority: AVERAGE
+              description: 'The partner cannot be reached or refuses the message; the send queue keeps retrying.'
+              tags:
+                - tag: scope
+                  value: notice
+            - uuid: 678daa3ab958455b8e7555e8bdc70d53
+              expression: 'last(/AS24Net by HTTP/as2.partner.failed["{#AS2ID}"])>0 and length(last(/AS24Net by HTTP/as2.partner.error["{#AS2ID}"]))>=0'
+              name: 'AS24Net: Messages for {#PARTNER} failed for good'
+              opdata: 'Failed: {ITEM.LASTVALUE1}, last error: {ITEM.LASTVALUE2}'
+              priority: HIGH
+              description: 'The retries are exhausted, the partner refused the message or returned a negative MDN. Send the message again or delete it in Messages / Outgoing.'
+              manual_close: 'YES'
+              tags:
+                - tag: scope
+                  value: notice
+            - uuid: 502610212f314bbf93cf10d4b517db13
+              expression: 'last(/AS24Net by HTTP/as2.partner.mdn.age["{#AS2ID}"])>{$AS2.MDN.MAX.AGE:"{#AS2ID}"}'
+              name: 'AS24Net: {#PARTNER} has not sent the MDN of a message for {$AS2.MDN.MAX.AGE:"{#AS2ID}"}'
+              opdata: 'Oldest: {ITEM.LASTVALUE1}'
+              priority: WARNING
+              description: 'The partner accepted the message but its asynchronous MDN has not arrived; when the MDN timeout of the connection passes, the message is sent again. Raise the threshold for partners that confirm late.'
+              tags:
+                - tag: scope
+                  value: notice
+      tags:
+        - tag: class
+          value: application
+        - tag: target
+          value: as24net
+      macros:
+        - macro: '{$AS2.MDN.MAX.AGE}'
+          value: 4h
+          description: 'A message may wait this long for its asynchronous MDN; AS2 name as context for one partner.'
+        - macro: '{$AS2.NODATA}'
+          value: 15m
+          description: 'Time without an answer after which the server is reported as not answering.'
+        - macro: '{$AS2.TOKEN}'
+          type: SECRET_TEXT
+          description: 'API token from Settings / API tokens.'
+        - macro: '{$AS2.URL}'
+          value: 'https://as2.example.com'
+          description: 'Address of the server without a trailing slash.'
+        - macro: '{$AS2.WAITING.MAX.AGE}'
+          value: 1h
+          description: 'A message may wait this long to be sent; AS2 name as context for one partner.'
+      valuemaps:
+        - uuid: 9f327287c05f4bbeb10d8a227e66278d
+          name: 'AS24Net health state'
+          mappings:
+            - value: '0'
+              newvalue: Healthy
+            - value: '1'
+              newvalue: Degraded
+            - value: '2'
+              newvalue: Unhealthy

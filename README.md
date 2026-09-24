@@ -38,6 +38,7 @@ HTTP instead of OFTP2.
 - Signing in with a password or with Microsoft Entra ID, where the list of users decides who may come in
 - Health checks for Docker, Kubernetes and monitoring: database, storage, send service, certificates, certificate
   changes and stuck messages, shown on the dashboard and reported by webhook
+- The send queue in numbers per partner for monitoring, with a Zabbix template
 - Retention: old data removed every night and written to compressed archive files first, nothing unfinished touched
 - A development setup with two stations that are each other's partner on one server, to see a message go the whole
   way at once
@@ -324,6 +325,7 @@ verified is posted only to the host of the partner's URL.
 | `GET /health/live` | none, the process answers | anonymous |
 | `GET /health/ready` | `database`, `storage`, `send-service`; `503` when one of them is unhealthy | anonymous, the state only |
 | `GET /health/details` | all of them, as JSON with a description and data | API token (`Authorization: Bearer …`) |
+| `GET /health/send-queue` | none, the send queue in numbers per partner for the monitoring (see below) | API token |
 
 The liveness endpoint checks nothing on purpose: a database outage must not make the orchestrator restart the
 server again and again. The Docker image uses it in its `HEALTHCHECK`; readiness is for the load balancer or a
@@ -384,6 +386,77 @@ The checks read the state the services keep and the database; none of them conne
 runs them every 30 seconds, shows the result on the dashboard and writes every change to the log. With
 `HealthChecks:WebhookUrl` configured, every change is also posted as the webhook `health.changed` with the overall
 state in `status` and the checks that are not healthy in `error`.
+
+### Messages that are not sent
+
+The check `messages` only says that something is stuck for a day. When a message has to reach the partner sooner,
+the monitoring asks `/health/send-queue` and decides itself: the endpoint returns counts and ages, no thresholds.
+
+```json
+{
+  "waiting": 2,
+  "oldestWaitingMinutes": 120,
+  "failed": 1,
+  "awaitingMdn": 1,
+  "oldestAwaitingMdnMinutes": 45,
+  "partners": [
+    {
+      "partner": "Loopback B",
+      "as2Id": "AS24NET-B",
+      "waiting": 2,
+      "oldestWaitingMinutes": 120,
+      "failed": 1,
+      "awaitingMdn": 1,
+      "oldestAwaitingMdnMinutes": 45,
+      "lastError": "The partner did not answer within 120 s.",
+      "lastErrorDate": "2026-09-24T11:13:34"
+    }
+  ]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `waiting` | messages new or waiting for a retry |
+| `oldestWaitingMinutes` | how long the oldest of them has been in the queue |
+| `failed` | messages that failed for good (`Failed`) or got a negative MDN (`NotDelivered`) and wait for the administrator to send them again or delete them |
+| `awaitingMdn` | messages sent whose asynchronous MDN has not arrived yet (`Sent`) |
+| `oldestAwaitingMdnMinutes` | how long ago the oldest of them was sent |
+| `lastError`, `lastErrorDate` | the error of the message that failed last, among those waiting or failed |
+
+Ages are whole minutes and `0` when there is nothing, so that every value is a number. Every partner is listed,
+also with an empty queue, so that the items the monitoring discovers per partner do not come and go.
+
+### Zabbix
+
+In Zabbix (7.0 or later) import the template [`samples/zabbix/as24net_by_http.yaml`](samples/zabbix/as24net_by_http.yaml)
+(*Data collection → Templates → Import*), link it to a host and set the macros `{$AS2.URL}` and `{$AS2.TOKEN}`.
+It watches the state of the server, every health check, the size of the database and the send queue of every
+partner; the thresholds are the macros `{$AS2.WAITING.MAX.AGE}` (default `1h`) and `{$AS2.MDN.MAX.AGE}`
+(default `4h`), and a partner gets its own with its AS2 name as context, e.g.
+`{$AS2.WAITING.MAX.AGE:"PARTNER-AS2"}` = `4h`.
+
+What the template does, to build it by hand or in another monitoring:
+
+1. A host with the macros `{$AS2.URL}` (e.g. `https://as2.example.com`) and `{$AS2.TOKEN}` (secret text).
+2. A master item of the type *HTTP agent*: URL `{$AS2.URL}/health/send-queue`, header
+   `Authorization: Bearer {$AS2.TOKEN}`, type of information *Text*, interval e.g. `5m`, history `0` (only the
+   dependent items keep values).
+3. Dependent items for the totals with the preprocessing *JSONPath*, e.g. `$.oldestWaitingMinutes` or `$.failed`.
+4. A discovery rule of the type *Dependent item* on the master item, with the preprocessing *JSONPath*
+   `$.partners` and the LLD macros `{#PARTNER}` = `$.partner` and `{#AS2ID}` = `$.as2Id`.
+5. Item prototypes with *JSONPath* such as `$.partners[?(@.as2Id=='{#AS2ID}')].oldestWaitingMinutes.first()`
+   (multiplied by 60, so that Zabbix shows the minutes as a time), and trigger prototypes, e.g.:
+
+| Trigger | Expression |
+|---|---|
+| A message for {#PARTNER} waits for more than an hour | `last(/AS24Net by HTTP/as2.partner.waiting.age["{#AS2ID}"])>1h` |
+| Messages for {#PARTNER} failed for good | `last(/AS24Net by HTTP/as2.partner.failed["{#AS2ID}"])>0` |
+| {#PARTNER} has not sent an MDN for 4 hours | `last(/AS24Net by HTTP/as2.partner.mdn.age["{#AS2ID}"])>4h` |
+| The server does not answer | `nodata(/AS24Net by HTTP/as2.health.ready,15m)=1` |
+
+The AS2 name is quoted in the item keys because it may contain spaces or commas. The last trigger matters as much
+as the others: a server that is down sends no alert of its own.
 
 ## Transfer log
 

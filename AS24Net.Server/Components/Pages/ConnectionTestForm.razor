@@ -39,12 +39,12 @@
     <div class="small">
         <ConnectionTestDetails Result="result" />
     </div>
-    @if (!result.Success && Partner.Contacts.Count > 0)
+    @if (!result.Success && Partner.Connection.Contacts.Count > 0)
     {
         <hr />
         <h6>Contacts of the partner</h6>
         <div class="small">
-            @foreach (var contact in Partner.Contacts)
+            @foreach (var contact in Partner.Connection.Contacts)
             {
                 <PartnerContactView Contact="contact" />
             }

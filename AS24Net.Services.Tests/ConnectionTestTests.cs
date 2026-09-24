@@ -19,9 +19,13 @@ public class ConnectionTestTests
     (
         new Partner
         {
-            Name = "Partner", As2Id = "PARTNER", Url = "https://as2.example.com/as2",
-            SignMessages = true, EncryptMessages = true, MdnMode = MdnMode.Sync, RequestSignedMdn = true,
-            SignatureCertificate = Valid("partner"), EncryptionCertificate = Valid("partner"),
+            Name = "Partner", As2Id = "PARTNER",
+            Connection = new Connection
+            {
+                Name = "Partner", Url = "https://as2.example.com/as2",
+                SignMessages = true, EncryptMessages = true, MdnMode = MdnMode.Sync, RequestSignedMdn = true,
+                SignatureCertificate = Valid("partner"), EncryptionCertificate = Valid("partner"),
+            },
         },
         new Identity { Name = "Us", As2Id = "US", SigningCertificate = Valid("us", privateKey: true) }
     );
@@ -41,8 +45,8 @@ public class ConnectionTestTests
     public void MissingCertificates_AreProblems()
     {
         var (partner, identity) = Configured();
-        partner.EncryptionCertificate = null;
-        partner.SignatureCertificate = null;
+        partner.Connection.EncryptionCertificate = null;
+        partner.Connection.SignatureCertificate = null;
         identity.SigningCertificate = Valid("no key");
 
         var (problems, _) = ConnectionTestService.CheckConfiguration(partner, identity, new GlobalSettings(), Now);
@@ -56,9 +60,9 @@ public class ConnectionTestTests
     public void CertificatesThatAreNotUsed_AreNotRequired()
     {
         var (partner, identity) = Configured();
-        partner.SignMessages = partner.EncryptMessages = partner.RequireSignedMessages = false;
-        partner.MdnMode = MdnMode.None;
-        partner.SignatureCertificate = partner.EncryptionCertificate = null;
+        partner.Connection.SignMessages = partner.Connection.EncryptMessages = partner.Connection.RequireSignedMessages = false;
+        partner.Connection.MdnMode = MdnMode.None;
+        partner.Connection.SignatureCertificate = partner.Connection.EncryptionCertificate = null;
         identity.SigningCertificate = null;
 
         var (problems, _) = ConnectionTestService.CheckConfiguration(partner, identity, new GlobalSettings(), Now);
@@ -70,7 +74,7 @@ public class ConnectionTestTests
     public void ExpiredCertificate_IsAProblem_AndOneThatExpiresSoon_AWarning()
     {
         var (partner, identity) = Configured();
-        partner.EncryptionCertificate = Valid("expired", days: -1);
+        partner.Connection.EncryptionCertificate = Valid("expired", days: -1);
         identity.SigningCertificate = Valid("soon", privateKey: true, days: 10);
 
         var (problems, warnings) = ConnectionTestService.CheckConfiguration(partner, identity, new GlobalSettings(), Now);
@@ -83,7 +87,7 @@ public class ConnectionTestTests
     public void AsynchronousMdn_NeedsThePublicUrl()
     {
         var (partner, identity) = Configured();
-        partner.MdnMode = MdnMode.Async;
+        partner.Connection.MdnMode = MdnMode.Async;
 
         var (problems, _) = ConnectionTestService.CheckConfiguration(partner, identity, new GlobalSettings { PublicUrl = null }, Now);
         Assert.Contains(problems, p => p.Contains("public URL"));
@@ -97,8 +101,8 @@ public class ConnectionTestTests
     public void PlainHttpWithoutEncryption_IsAWarning()
     {
         var (partner, identity) = Configured();
-        partner.Url = "http://as2.example.com/as2";
-        partner.EncryptMessages = false;
+        partner.Connection.Url = "http://as2.example.com/as2";
+        partner.Connection.EncryptMessages = false;
 
         var (_, warnings) = ConnectionTestService.CheckConfiguration(partner, identity, new GlobalSettings(), Now);
 
@@ -115,15 +119,15 @@ public class ConnectionTestTests
     [InlineData(HttpStatusCode.BadGateway, false)]
     public void HttpAnswers_ShowWhetherTheEndpointCanBeUsed(HttpStatusCode status, bool success)
     {
-        Assert.Equal(success, ConnectionTestService.EvaluateResponse(status, null, new Partner()).Success);
+        Assert.Equal(success, ConnectionTestService.EvaluateResponse(status, null, new Connection()).Success);
     }
 
     [Fact]
     public void Unauthorized_SaysWhetherCredentialsAreSet()
     {
-        Assert.Contains("set the user name", ConnectionTestService.EvaluateResponse(HttpStatusCode.Unauthorized, null, new Partner()).Message);
+        Assert.Contains("set the user name", ConnectionTestService.EvaluateResponse(HttpStatusCode.Unauthorized, null, new Connection()).Message);
         Assert.Contains("refuses our HTTP user name",
-            ConnectionTestService.EvaluateResponse(HttpStatusCode.Unauthorized, null, new Partner { HttpUserName = "us" }).Message);
+            ConnectionTestService.EvaluateResponse(HttpStatusCode.Unauthorized, null, new Connection { HttpUserName = "us" }).Message);
     }
 
     [Theory]
@@ -175,8 +179,12 @@ public class ConnectionTestTests
         // Nothing to secure, so that only the connection decides.
         var partner = new Partner
         {
-            Id = 1, Name = "Local", As2Id = "LOCAL", Url = url, TimeoutSeconds = 10,
-            SignMessages = false, EncryptMessages = false, RequireSignedMessages = false, MdnMode = MdnMode.None,
+            Id = 1, Name = "Local", As2Id = "LOCAL",
+            Connection = new Connection
+            {
+                Name = "Local", Url = url, TimeoutSeconds = 10,
+                SignMessages = false, EncryptMessages = false, RequireSignedMessages = false, MdnMode = MdnMode.None,
+            },
         };
         using var clients = new As2HttpClientProvider();
         var service = new ConnectionTestService(null!, null!, clients, null!, new ApplicationTimeService(new ConfigurationBuilder().Build()),

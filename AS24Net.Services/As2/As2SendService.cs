@@ -173,12 +173,12 @@ public class As2SendService(
         var now = timeService.GetCurrentTime();
 
         var overdue = (await repository.GetAwaitingMdnAsync(cancellationToken))
-            .Where(m => m.SentDate is { } sent && now - sent > TimeSpan.FromMinutes(m.Partner.MdnTimeoutMinutes))
+            .Where(m => m.SentDate is { } sent && now - sent > TimeSpan.FromMinutes(m.Partner.Connection.MdnTimeoutMinutes))
             .ToList();
 
         foreach (var message in overdue)
         {
-            var error = $"The asynchronous MDN did not arrive within {message.Partner.MdnTimeoutMinutes} minutes.";
+            var error = $"The asynchronous MDN did not arrive within {message.Partner.Connection.MdnTimeoutMinutes} minutes.";
             message.LastError = error;
             message.LastErrorDate = now;
             message.RetryCount++;

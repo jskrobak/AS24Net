@@ -186,6 +186,7 @@ public sealed class ConnectionTestService(
     public async Task<ConnectionTestResult> RunAsync(Partner partner, Identity identity, GlobalSettings settings,
         CancellationToken cancellationToken = default)
     {
+        var connection = partner.Connection;
         var tested = timeService.GetCurrentTime();
         var stopwatch = Stopwatch.StartNew();
         var (problems, warnings) = CheckConfiguration(partner, identity, settings, tested);
@@ -193,14 +194,14 @@ public sealed class ConnectionTestService(
         int? httpStatus = null;
 
         ConnectionTestResult Result(ConnectionTestStage stage, string message, string? details = null) =>
-            new(partner.Id, partner.Name, identity.As2Id, partner.Url, tested, stopwatch.Elapsed, stage, message, problems, warnings,
+            new(partner.Id, partner.Name, identity.As2Id, connection.Url, tested, stopwatch.Elapsed, stage, message, problems, warnings,
                 httpStatus, tls, remoteCertificate, details);
 
-        if (!Uri.TryCreate(partner.Url, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-            return Result(ConnectionTestStage.Setup, $"'{partner.Url}' is not an absolute http or https URL.");
+        if (!Uri.TryCreate(connection.Url, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            return Result(ConnectionTestStage.Setup, $"'{connection.Url}' is not an absolute http or https URL.");
 
         var stage = ConnectionTestStage.Connect;
-        var timeout = TimeSpan.FromSeconds(Math.Min(partner.TimeoutSeconds, ConnectTimeout.TotalSeconds));
+        var timeout = TimeSpan.FromSeconds(Math.Min(connection.TimeoutSeconds, ConnectTimeout.TotalSeconds));
         try
         {
             using var client = new TcpClient();
@@ -220,13 +221,13 @@ public sealed class ConnectionTestService(
             if (uri.Scheme == Uri.UriSchemeHttps)
             {
                 stage = ConnectionTestStage.Tls;
-                (tls, remoteCertificate) = await HandshakeAsync(client.GetStream(), uri.DnsSafeHost, partner, timeout, tested, warnings,
+                (tls, remoteCertificate) = await HandshakeAsync(client.GetStream(), uri.DnsSafeHost, partner.Name, connection, timeout, tested, warnings,
                     cancellationToken);
             }
 
             stage = ConnectionTestStage.Http;
             using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-            using var http = httpClients.CreateClient(partner);
+            using var http = httpClients.CreateClient(connection);
             http.Timeout = timeout;
             HttpResponseMessage response;
             try
@@ -241,7 +242,7 @@ public sealed class ConnectionTestService(
             using (response)
             {
                 httpStatus = (int)response.StatusCode;
-                var (success, message) = EvaluateResponse(response.StatusCode, response.ReasonPhrase, partner);
+                var (success, message) = EvaluateResponse(response.StatusCode, response.ReasonPhrase, connection);
                 if (!success)
                     return Result(ConnectionTestStage.Http, message);
 
@@ -266,10 +267,10 @@ public sealed class ConnectionTestService(
     /// The TLS handshake on its own, so that the protocol, the cipher suite and the certificate of the partner can be
     /// shown; the server certificate is checked as the HTTP client checks it when sending.
     /// </summary>
-    private static async Task<(string Tls, string Certificate)> HandshakeAsync(NetworkStream stream, string host, Partner partner,
+    private static async Task<(string Tls, string Certificate)> HandshakeAsync(NetworkStream stream, string host, string partnerName, Connection connection,
         TimeSpan timeout, DateTime now, List<string> warnings, CancellationToken cancellationToken)
     {
-        using var anchor = partner.TlsCertificate is { } trusted ? CertificateLoader.Load(trusted) : null;
+        using var anchor = connection.TlsCertificate is { } trusted ? CertificateLoader.Load(trusted) : null;
         X509Certificate2? remote = null;
         string? refusal = null;
 
@@ -299,7 +300,7 @@ public sealed class ConnectionTestService(
         }
         catch (AuthenticationException ex) when (refusal is not null)
         {
-            throw new AuthenticationException($"The server certificate of {partner.Name} is refused: {refusal}" +
+            throw new AuthenticationException($"The server certificate of {partnerName} is refused: {refusal}" +
                                               (remote is null ? "" : $" ({CertificateText(remote)})"), ex);
         }
 
@@ -335,13 +336,13 @@ public sealed class ConnectionTestService(
     /// <c>GET</c> with an error of their own (e.g. 405, only <c>POST</c> is allowed), which shows as much as a success:
     /// the address exists and lets us in.
     /// </summary>
-    public static (bool Success, string Message) EvaluateResponse(HttpStatusCode status, string? reason, Partner partner)
+    public static (bool Success, string Message) EvaluateResponse(HttpStatusCode status, string? reason, Connection connection)
     {
         var code = $"HTTP {(int)status}{(string.IsNullOrWhiteSpace(reason) ? "" : " " + reason)}";
         return status switch
         {
-            HttpStatusCode.Unauthorized or HttpStatusCode.ProxyAuthenticationRequired => (false, string.IsNullOrEmpty(partner.HttpUserName)
-                ? $"The partner wants HTTP authentication ({code}): set the user name and password of the partner."
+            HttpStatusCode.Unauthorized or HttpStatusCode.ProxyAuthenticationRequired => (false, string.IsNullOrEmpty(connection.HttpUserName)
+                ? $"The partner wants HTTP authentication ({code}): set the user name and password of the connection."
                 : $"The partner refuses our HTTP user name or password ({code})."),
             HttpStatusCode.Forbidden => (false, $"The partner refuses access ({code}); it may not accept our address."),
             HttpStatusCode.NotFound => (false, $"The URL does not exist at the partner ({code}); check the path."),
@@ -360,6 +361,7 @@ public sealed class ConnectionTestService(
     public static (List<string> Problems, List<string> Warnings) CheckConfiguration(Partner partner, Identity identity,
         GlobalSettings settings, DateTime now)
     {
+        var connection = partner.Connection;
         var problems = new List<string>();
         var warnings = new List<string>();
 
@@ -385,26 +387,26 @@ public sealed class ConnectionTestService(
         if (!partner.Enabled)
             warnings.Add("The partner is disabled: nothing is sent to it and its messages are refused.");
 
-        if (partner.SignMessages)
+        if (connection.SignMessages)
             Check(identity.SigningCertificate, $"The signing certificate of identity {identity.Name}", required: true, privateKey: true);
-        if (partner.EncryptMessages)
-            Check(partner.EncryptionCertificate, "The encryption certificate of the partner", required: true);
+        if (connection.EncryptMessages)
+            Check(connection.EncryptionCertificate, "The encryption certificate of the partner", required: true);
 
-        var verifies = partner.RequireSignedMessages || partner is { MdnMode: not MdnMode.None, RequestSignedMdn: true };
-        Check(partner.SignatureCertificate, "The signature certificate of the partner", required: verifies);
+        var verifies = connection.RequireSignedMessages || connection is { MdnMode: not MdnMode.None, RequestSignedMdn: true };
+        Check(connection.SignatureCertificate, "The signature certificate of the partner", required: verifies);
 
         var decryption = identity.DecryptionCertificate ?? identity.SigningCertificate;
-        Check(decryption, $"The decryption certificate of identity {identity.Name}", required: partner.RequireEncryptedMessages, privateKey: true);
+        Check(decryption, $"The decryption certificate of identity {identity.Name}", required: connection.RequireEncryptedMessages, privateKey: true);
 
-        if (partner.MdnMode == MdnMode.Async)
+        if (connection.MdnMode == MdnMode.Async)
         {
             if (string.IsNullOrWhiteSpace(settings.PublicUrl))
                 problems.Add("An asynchronous MDN needs the public URL of this server (Settings).");
-            else if (!Uri.TryCreate(settings.PublicUrl, UriKind.Absolute, out var publicUrl) || publicUrl.IsLoopback && !IsLoopback(partner.Url))
+            else if (!Uri.TryCreate(settings.PublicUrl, UriKind.Absolute, out var publicUrl) || publicUrl.IsLoopback && !IsLoopback(connection.Url))
                 warnings.Add($"The partner cannot reach our public URL {settings.PublicUrl} to post the asynchronous MDN.");
         }
 
-        if (Uri.TryCreate(partner.Url, UriKind.Absolute, out var url) && url.Scheme == Uri.UriSchemeHttp && !partner.EncryptMessages)
+        if (Uri.TryCreate(connection.Url, UriKind.Absolute, out var url) && url.Scheme == Uri.UriSchemeHttp && !connection.EncryptMessages)
             warnings.Add("Messages go over plain HTTP without encryption: anybody on the way can read them.");
 
         return (problems, warnings);

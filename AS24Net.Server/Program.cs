@@ -130,6 +130,10 @@ builder.Services.AddAuthorization(options =>
 {
     // Everything except the login page and static files requires a signed in user.
     options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
+    // API tokens allowed to change connections, partners, identities and certificates.
+    options.AddPolicy(ApiTokenAuthenticationHandler.ConfigurationPolicy, policy => policy
+        .AddAuthenticationSchemes(ApiTokenAuthenticationHandler.SchemeName)
+        .RequireClaim(ApiTokenAuthenticationHandler.ConfigurationClaim, "true"));
 });
 builder.Services.AddCascadingAuthenticationState();
 

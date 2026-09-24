@@ -8,7 +8,7 @@ namespace AS24Net.Services.Health;
 
 /// <summary>
 /// No certificate in use expired or expires within <see cref="WarningDays"/> days: ours (signing and decryption of
-/// the identities) and those of the partners, unless a scheduled change replaces it before it expires.
+/// the identities) and those of the connections to partners, unless a scheduled change replaces it before it expires.
 /// Certificates stored but not used, and those kept only for a roll-over, are left out.
 /// </summary>
 public sealed class CertificatesHealthCheck(IServiceScopeFactory serviceScopeFactory, ITimeService timeService) : IHealthCheck
@@ -22,7 +22,7 @@ public sealed class CertificatesHealthCheck(IServiceScopeFactory serviceScopeFac
         using var scope = serviceScopeFactory.CreateScope();
         var certificates = (await scope.ServiceProvider.GetRequiredService<ICertificateRepository>().GetAllAsync(cancellationToken))
             .ToDictionary(c => c.Id);
-        var partners = await scope.ServiceProvider.GetRequiredService<IPartnerRepository>().GetAllAsync(cancellationToken);
+        var connections = await scope.ServiceProvider.GetRequiredService<IConnectionRepository>().GetAllWithPartnersAsync(cancellationToken);
         var identities = await scope.ServiceProvider.GetRequiredService<IIdentityRepository>().GetAllAsync(cancellationToken);
         var changes = await scope.ServiceProvider.GetRequiredService<ICertificateChangeRepository>().GetScheduledAsync(cancellationToken);
 
@@ -33,17 +33,18 @@ public sealed class CertificatesHealthCheck(IServiceScopeFactory serviceScopeFac
             uses.Add((identity.DecryptionCertificateId, $"decryption certificate of identity {identity.Name}", null));
         }
 
-        foreach (var partner in partners.Where(p => p.Enabled))
+        // A connection whose partners are all disabled is not in use.
+        foreach (var connection in connections.Where(c => c.Partners.Any(p => p.Enabled)))
         {
             DateTime? Replaced(params PartnerCertificateUsage[] usages) => changes
-                .Where(c => c.PartnerId == partner.Id && usages.Contains(c.Usage))
+                .Where(c => c.ConnectionId == connection.Id && usages.Contains(c.Usage))
                 .Min(c => (DateTime?)c.ActivateAt);
 
-            uses.Add((partner.SignatureCertificateId, $"signature certificate of partner {partner.Name}",
+            uses.Add((connection.SignatureCertificateId, $"signature certificate of connection {connection.Name}",
                 Replaced(PartnerCertificateUsage.Signature, PartnerCertificateUsage.SignatureAndEncryption)));
-            uses.Add((partner.EncryptionCertificateId, $"encryption certificate of partner {partner.Name}",
+            uses.Add((connection.EncryptionCertificateId, $"encryption certificate of connection {connection.Name}",
                 Replaced(PartnerCertificateUsage.Encryption, PartnerCertificateUsage.SignatureAndEncryption)));
-            uses.Add((partner.TlsCertificateId, $"TLS certificate trusted for partner {partner.Name}", Replaced(PartnerCertificateUsage.Tls)));
+            uses.Add((connection.TlsCertificateId, $"TLS certificate trusted for connection {connection.Name}", Replaced(PartnerCertificateUsage.Tls)));
         }
 
         return Evaluate(

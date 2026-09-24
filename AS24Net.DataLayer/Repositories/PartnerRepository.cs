@@ -24,7 +24,7 @@ public class PartnerRepository(
     public async Task<DataFragment<Partner>> GetFragmentAsync(PartnerFilter filter, GridDataProviderRequest<Partner> request,
         CancellationToken cancellationToken = default)
     {
-        var filtered = filter.Apply(Data);
+        var filtered = filter.Apply(Data.Include(p => p.Connection));
 
         var cnt = await filtered.CountAsync(cancellationToken);
 
@@ -46,10 +46,16 @@ public class PartnerRepository(
     public Task<Partner?> FindWithRefsAsync(int id, CancellationToken cancellationToken = default) =>
         WithRefs().FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
 
+    public Task<List<Partner>> GetAllWithConnectionAsync(CancellationToken cancellationToken = default) => Data
+        .Include(p => p.Connection)
+        .Include(p => p.DefaultIdentity)
+        .OrderBy(p => p.Name)
+        .ToListAsync(cancellationToken);
+
     private IQueryable<Partner> WithRefs() => Data
-        .Include(p => p.SignatureCertificate)
-        .Include(p => p.PreviousSignatureCertificate)
-        .Include(p => p.EncryptionCertificate)
-        .Include(p => p.TlsCertificate)
+        .Include(p => p.Connection).ThenInclude(c => c.SignatureCertificate)
+        .Include(p => p.Connection).ThenInclude(c => c.PreviousSignatureCertificate)
+        .Include(p => p.Connection).ThenInclude(c => c.EncryptionCertificate)
+        .Include(p => p.Connection).ThenInclude(c => c.TlsCertificate)
         .Include(p => p.DefaultIdentity);
 }

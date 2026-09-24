@@ -65,7 +65,7 @@
                                 <div class="fw-bold @(partner.Enabled ? "" : "text-body-secondary text-decoration-line-through")">@partner.Name</div>
                                 <div class="small text-body-secondary a24-code">@partner.As2Id</div>
                             </td>
-                            <td class="small text-break" style="max-width: 20rem;">@partner.Url</td>
+                            <td class="small text-break" style="max-width: 20rem;">@partner.Connection.Url</td>
                             <td>
                                 @if (Tests.Current == partner.Id)
                                 {
@@ -80,10 +80,10 @@
                                 @if (result is not null)
                                 {
                                     <ConnectionTestDetails Result="result" />
-                                    @if (!result.Success && partner.Contacts.Count > 0)
+                                    @if (!result.Success && partner.Connection.Contacts.Count > 0)
                                     {
                                         <div class="mt-1 text-body-secondary">Contacts:</div>
-                                        @foreach (var contact in partner.Contacts)
+                                        @foreach (var contact in partner.Connection.Contacts)
                                         {
                                             <PartnerContactView Contact="contact" />
                                         }

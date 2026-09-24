@@ -27,6 +27,7 @@ public static class ApiEndpoints
         MapMessages(api, app);
         MapInbox(api);
         MapPartners(api);
+        api.MapConfiguration();
         MapStatus(api);
     }
 
@@ -263,10 +264,8 @@ public static class ApiEndpoints
     private static void MapPartners(RouteGroupBuilder api)
     {
         api.MapGet("/partners", async (IPartnerRepository repository, CancellationToken cancellationToken) =>
-                Results.Ok((await repository.GetAllAsync(cancellationToken))
-                    .OrderBy(p => p.Name)
-                    .Select(p => new PartnerDto(p.Id, p.Name, p.As2Id, p.Url, p.Enabled, p.MdnMode.ToString(), p.Contacts)).ToList()))
-            .WithSummary("Lists partners messages can be sent to, with their contacts.");
+                Results.Ok((await repository.GetAllWithConnectionAsync(cancellationToken)).Select(PartnerDto.From).ToList()))
+            .WithSummary("Lists partners messages can be sent to, with the contacts of their connections.");
 
         api.MapPost("/partners/{partner}/connection-test", async (string partner, string? identity,
                 IPartnerRepository partners, IIdentityRepository identities, ConnectionTestService tests,
@@ -302,20 +301,40 @@ public static class ApiEndpoints
                     .Select(i => new IdentityDto(i.Id, i.Name, i.As2Id)).ToList()))
             .WithSummary("Lists our identities messages can be sent from.");
 
+        api.MapGet("/connections/{connection}/certificate-changes", async (string connection, IConnectionRepository connections,
+                ICertificateChangeRepository changes, CancellationToken cancellationToken) =>
+                await FindConnectionAsync(connection, connections, cancellationToken) is { } entity
+                    ? Results.Ok(await ListChangesAsync(entity, changes, cancellationToken))
+                    : Results.NotFound(new ApiError($"Unknown connection '{connection}'.")))
+            .WithSummary("Certificate changes of a connection, scheduled and past.");
+
         api.MapGet("/partners/{partner}/certificate-changes", async (string partner, IPartnerRepository partners,
                 ICertificateChangeRepository changes, CancellationToken cancellationToken) =>
-            {
-                var partnerEntity = (await partners.GetAllAsync(cancellationToken)).FirstOrDefault(p => Matches(p.As2Id, partner) || Matches(p.Name, partner));
-                if (partnerEntity is null)
-                    return Results.NotFound(new ApiError($"Unknown partner '{partner}'."));
+                await FindPartnerAsync(partner, partners, cancellationToken) is { } entity
+                    ? Results.Ok(await ListChangesAsync(entity.Connection, changes, cancellationToken))
+                    : Results.NotFound(new ApiError($"Unknown partner '{partner}'.")))
+            .WithSummary("Certificate changes of the connection of a partner, scheduled and past.");
 
-                var list = (await changes.GetAllAsync(cancellationToken))
-                    .Where(c => c.PartnerId == partnerEntity.Id)
-                    .OrderByDescending(c => c.ActivateAt)
-                    .ToList();
-                return Results.Ok(list.Select(CertificateChangeDto.From).ToList());
+        api.MapPost("/connections/{connection}/certificate-changes", async (
+                string connection,
+                IFormFile file,
+                [FromForm] PartnerCertificateUsage? usage,
+                [FromForm] string activateAt,
+                [FromForm] string? note,
+                HttpContext httpContext,
+                IConnectionRepository connections,
+                CertificateChangeService service,
+                ApplicationTimeService time,
+                CancellationToken cancellationToken) =>
+            {
+                var entity = await FindConnectionAsync(connection, connections, cancellationToken);
+                return entity is null
+                    ? Results.NotFound(new ApiError($"Unknown connection '{connection}'."))
+                    : await ScheduleChangeAsync(entity, file, usage, activateAt, note, httpContext, service, time, cancellationToken);
             })
-            .WithSummary("Certificate changes of a partner, scheduled and past.");
+            .DisableAntiforgery()
+            .WithSummary("Uploads a new certificate of the partners of the connection (.cer, .crt, .pem) to be used from activateAt.")
+            .WithDescription(ScheduleDescription);
 
         api.MapPost("/partners/{partner}/certificate-changes", async (
                 string partner,
@@ -329,31 +348,15 @@ public static class ApiEndpoints
                 ApplicationTimeService time,
                 CancellationToken cancellationToken) =>
             {
-                if (!time.TryParseTime(activateAt, out var activateAtTime))
-                    return Results.BadRequest(new ApiError($"'{activateAt}' is not a time such as 2026-10-01T06:00 or 2026-10-01T04:00:00Z."));
-
-                var partnerEntity = (await partners.GetAllAsync(cancellationToken)).FirstOrDefault(p => Matches(p.As2Id, partner) || Matches(p.Name, partner));
-                if (partnerEntity is null)
-                    return Results.NotFound(new ApiError($"Unknown partner '{partner}'."));
-
-                using var buffer = new MemoryStream();
-                await file.CopyToAsync(buffer, cancellationToken);
-                try
-                {
-                    var change = await service.ScheduleFileAsync(partnerEntity.Id, buffer.ToArray(), file.FileName,
-                        usage ?? PartnerCertificateUsage.SignatureAndEncryption, activateAtTime, note,
-                        "API: " + httpContext.User.Identity?.Name, cancellationToken);
-                    return Results.Created($"/api/v1/certificate-changes/{change.Id}", CertificateChangeDto.From(change));
-                }
-                catch (InvalidOperationException ex)
-                {
-                    return Results.BadRequest(new ApiError(ex.Message));
-                }
+                var entity = await FindPartnerAsync(partner, partners, cancellationToken);
+                return entity is null
+                    ? Results.NotFound(new ApiError($"Unknown partner '{partner}'."))
+                    : await ScheduleChangeAsync(entity.Connection, file, usage, activateAt, note, httpContext, service, time, cancellationToken);
             })
             .DisableAntiforgery()
             .WithSummary("Uploads a new certificate of the partner (.cer, .crt, .pem) to be used from activateAt.")
-            .WithDescription("activateAt is an ISO 8601 time: with an offset or Z an instant, without one the time of the server (configuration " +
-                             "TimeZone). usage: Signature, Encryption, SignatureAndEncryption (default) or Tls. A time in the past applies it right away.");
+            .WithDescription(ScheduleDescription + " The certificate belongs to the connection of the partner, so it is used for all the " +
+                             "partners of the connection.");
 
         api.MapDelete("/certificate-changes/{id:int}", async (int id, HttpContext httpContext, ICertificateChangeRepository changes,
                 CertificateChangeService service, CancellationToken cancellationToken) =>
@@ -372,6 +375,47 @@ public static class ApiEndpoints
                 }
             })
             .WithSummary("Cancels a scheduled certificate change.");
+    }
+
+    private const string ScheduleDescription =
+        "activateAt is an ISO 8601 time: with an offset or Z an instant, without one the time of the server (configuration " +
+        "TimeZone). usage: Signature, Encryption, SignatureAndEncryption (default) or Tls. A time in the past applies it right away.";
+
+    /// <summary>The partner with the AS2 name or the name, with its connection.</summary>
+    internal static async Task<Partner?> FindPartnerAsync(string partner, IPartnerRepository partners, CancellationToken cancellationToken)
+    {
+        var all = await partners.GetAllWithConnectionAsync(cancellationToken);
+        return all.FirstOrDefault(p => Matches(p.As2Id, partner)) ?? all.FirstOrDefault(p => Matches(p.Name, partner));
+    }
+
+    internal static async Task<Connection?> FindConnectionAsync(string connection, IConnectionRepository connections,
+        CancellationToken cancellationToken) =>
+        (await connections.GetAllAsync(cancellationToken)).FirstOrDefault(c => Matches(c.Name, connection));
+
+    private static async Task<List<CertificateChangeDto>> ListChangesAsync(Connection connection, ICertificateChangeRepository changes,
+        CancellationToken cancellationToken) =>
+        (await changes.GetByConnectionAsync(connection.Id, cancellationToken)).Select(CertificateChangeDto.From).ToList();
+
+    private static async Task<IResult> ScheduleChangeAsync(Connection connection, IFormFile file, PartnerCertificateUsage? usage,
+        string activateAt, string? note, HttpContext httpContext, CertificateChangeService service, ApplicationTimeService time,
+        CancellationToken cancellationToken)
+    {
+        if (!time.TryParseTime(activateAt, out var activateAtTime))
+            return Results.BadRequest(new ApiError($"'{activateAt}' is not a time such as 2026-10-01T06:00 or 2026-10-01T04:00:00Z."));
+
+        using var buffer = new MemoryStream();
+        await file.CopyToAsync(buffer, cancellationToken);
+        try
+        {
+            var change = await service.ScheduleFileAsync(connection.Id, buffer.ToArray(), file.FileName,
+                usage ?? PartnerCertificateUsage.SignatureAndEncryption, activateAtTime, note,
+                "API: " + httpContext.User.Identity?.Name, cancellationToken);
+            return Results.Created($"/api/v1/certificate-changes/{change.Id}", CertificateChangeDto.From(change));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new ApiError(ex.Message));
+        }
     }
 
     #endregion
@@ -414,7 +458,7 @@ public static class ApiEndpoints
 
     #endregion
 
-    private static bool Matches(string? value, string other) => string.Equals(value?.Trim(), other.Trim(), StringComparison.OrdinalIgnoreCase);
+    internal static bool Matches(string? value, string other) => string.Equals(value?.Trim(), other.Trim(), StringComparison.OrdinalIgnoreCase);
 
     private static int Skip(int? skip) => Math.Max(0, skip ?? 0);
 
@@ -425,7 +469,12 @@ public record ApiError(string Error);
 
 public record ApiPage<T>(IReadOnlyList<T> Items, int TotalCount);
 
-public record PartnerDto(int Id, string Name, string As2Id, string Url, bool Enabled, string MdnMode, IReadOnlyList<PartnerContact> Contacts);
+public record PartnerDto(int Id, string Name, string As2Id, string Url, bool Enabled, string MdnMode, string Connection,
+    string? Description, string? DefaultIdentityAs2Id, string ContentType, string? Subject, IReadOnlyList<PartnerContact> Contacts)
+{
+    public static PartnerDto From(Partner p) => new(p.Id, p.Name, p.As2Id, p.Connection.Url, p.Enabled, p.Connection.MdnMode.ToString(),
+        p.Connection.Name, p.Description, p.DefaultIdentity?.As2Id, p.ContentType, p.Subject, p.Connection.Contacts);
+}
 
 public record IdentityDto(int Id, string Name, string As2Id);
 
@@ -449,11 +498,11 @@ public record ReceivedMessageDto(int Id, string MessageId, string Status, string
         m.MdnDisposition, m.MdnStatus.ToString(), m.Error, m.FetchedDate);
 }
 
-public record CertificateChangeDto(int Id, string PartnerName, int? CertificateId, string Usage, DateTime ActivateAt, string Status,
-    DateTime? AppliedAt, string? Note, string? LastError, DateTime Created, string? CreatedBy)
+public record CertificateChangeDto(int Id, string Connection, int? CertificateId, string? CertificateThumbprint, string Usage,
+    DateTime ActivateAt, string Status, DateTime? AppliedAt, string? Note, string? LastError, DateTime Created, string? CreatedBy)
 {
-    public static CertificateChangeDto From(CertificateChange c) => new(c.Id, c.PartnerName, c.CertificateId, c.Usage.ToString(),
-        c.ActivateAt, c.Status.ToString(), c.AppliedAt, c.Note, c.LastError, c.Created, c.CreatedBy);
+    public static CertificateChangeDto From(CertificateChange c) => new(c.Id, c.ConnectionName, c.CertificateId, c.Certificate?.Thumbprint,
+        c.Usage.ToString(), c.ActivateAt, c.Status.ToString(), c.AppliedAt, c.Note, c.LastError, c.Created, c.CreatedBy);
 }
 
 public record TransferEventDto(int Id, DateTime Timestamp, string Category, string Level, string Type, string Message,

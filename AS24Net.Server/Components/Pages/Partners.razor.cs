@@ -13,37 +13,27 @@ public partial class Partners : ComponentBase
     [Inject] protected IHxMessengerService Messenger { get; set; } = null!;
     [Inject] protected NavigationManager Navigation { get; set; } = null!;
 
-    private static readonly MdnMode[] mdnModes = Enum.GetValues<MdnMode>();
-
     private Partner? currentPartner;
-    private int? originalSignatureCertificateId;
     private PartnerFilter filterModel = new();
     private HxGrid<Partner> gridComponent = null!;
     private HxModal partnerEditModal = null!;
-    private List<Certificate> allCertificates = [];
-    private List<Certificate> certificates = [];
+    private List<Connection> connections = [];
     private List<Identity> identities = [];
+
+    /// <summary>Opens the form of a new partner of the connection right away (from the connection's menu).</summary>
+    [SupplyParameterFromQuery(Name = "connection")] public int? ConnectionQuery { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
-        allCertificates = await DataService.GetAllCertificatesAsync();
+        connections = await DataService.GetAllConnectionsAsync();
         identities = await DataService.GetAllIdentitiesAsync();
     }
 
-    /// <summary>
-    /// The partner's certificates are the ones without a private key (a CA certificate for HTTPS is one of them too),
-    /// and those the partner uses already, e.g. a certificate shared with our identity: the selects need their items.
-    /// </summary>
-    private void PrepareCertificates(Partner partner)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        int?[] used = [partner.SignatureCertificateId, partner.EncryptionCertificateId, partner.TlsCertificateId];
-        certificates = allCertificates.Where(c => !c.HasPrivateKey || used.Contains(c.Id)).ToList();
+        if (firstRender && ConnectionQuery is { } connection && connections.Any(c => c.Id == connection))
+            await ShowNewAsync(connection);
     }
-
-    private static string CertificateText(Certificate c) => $"{c.Name} (valid to {c.ValidTo:d})";
-
-    private string? CertificateValidity(int? id) =>
-        id is null ? null : certificates.FirstOrDefault(c => c.Id == id) is { } c ? $"valid to {c.ValidTo:d}" : null;
 
     private async Task<GridDataProviderResult<Partner>> GetGridData(GridDataProviderRequest<Partner> request)
     {
@@ -51,11 +41,21 @@ public partial class Partners : ComponentBase
         return new GridDataProviderResult<Partner> { Data = response.Data, TotalCount = response.TotalCount };
     }
 
-    private async Task HandleNewItemClicked()
+    private Task HandleNewItemClicked() => ShowNewAsync(null);
+
+    private async Task ShowNewAsync(int? connectionId)
     {
-        currentPartner = new Partner { DefaultIdentityId = identities.Count == 1 ? identities[0].Id : null };
-        originalSignatureCertificateId = null;
-        PrepareCertificates(currentPartner);
+        if (connections.Count == 0)
+        {
+            Messenger.AddWarning("Set up the connection of the partner in Connections first.");
+            return;
+        }
+
+        currentPartner = new Partner
+        {
+            ConnectionId = connectionId ?? connections[0].Id,
+            DefaultIdentityId = identities.Count == 1 ? identities[0].Id : null,
+        };
         await partnerEditModal.ShowAsync();
     }
 
@@ -65,8 +65,6 @@ public partial class Partners : ComponentBase
             return;
 
         currentPartner = partner;
-        originalSignatureCertificateId = partner.SignatureCertificateId;
-        PrepareCertificates(partner);
         await partnerEditModal.ShowAsync();
     }
 
@@ -88,7 +86,7 @@ public partial class Partners : ComponentBase
     {
         try
         {
-            await DataService.SavePartnerAsync(currentPartner!, originalSignatureCertificateId);
+            await DataService.SavePartnerAsync(currentPartner!);
         }
         catch (InvalidOperationException ex)
         {

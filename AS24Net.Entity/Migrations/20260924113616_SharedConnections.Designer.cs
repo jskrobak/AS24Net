@@ -3,6 +3,7 @@ using System;
 using AS24Net.Entity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AS24Net.Entity.Migrations
 {
     [DbContext(typeof(A24DbContext))]
-    partial class A24DbContextModelSnapshot : ModelSnapshot
+    [Migration("20260924113616_SharedConnections")]
+    partial class SharedConnections
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -193,9 +196,13 @@ namespace AS24Net.Entity.Migrations
                     b.Property<bool>("CompressMessages")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("Contacts")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
+                    b.Property<string>("ContactEmail")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ContactName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<string>("Description")
                         .HasMaxLength(200)

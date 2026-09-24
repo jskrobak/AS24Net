@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AS24Net.Entity.Migrations
 {
     [DbContext(typeof(A24DbContext))]
-    [Migration("20260924111305_PartnerContacts")]
-    partial class PartnerContacts
+    [Migration("20260924160514_ConnectionContacts")]
+    partial class ConnectionContacts
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -32,6 +32,9 @@ namespace AS24Net.Entity.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("AllowConfiguration")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp without time zone");
@@ -135,6 +138,14 @@ namespace AS24Net.Entity.Migrations
                     b.Property<int?>("CertificateId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("ConnectionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ConnectionName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp without time zone");
 
@@ -150,14 +161,6 @@ namespace AS24Net.Entity.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
-                    b.Property<int?>("PartnerId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("PartnerName")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -172,11 +175,115 @@ namespace AS24Net.Entity.Migrations
 
                     b.HasIndex("CertificateId");
 
-                    b.HasIndex("PartnerId");
+                    b.HasIndex("ConnectionId");
 
                     b.HasIndex("Status", "ActivateAt");
 
                     b.ToTable("CertificateChanges");
+                });
+
+            modelBuilder.Entity("AS24Net.Domain.Connection", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("CompressBeforeSigning")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CompressMessages")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Contacts")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("EncryptMessages")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("EncryptionAlgorithm")
+                        .IsRequired()
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)");
+
+                    b.Property<int?>("EncryptionCertificateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("HttpPassword")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("HttpUserName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("MdnMode")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<int>("MdnTimeoutMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int?>("PreviousSignatureCertificateId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("RequestSignedMdn")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("RequireEncryptedMessages")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("RequireSignedMessages")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SignMessages")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("SignatureAlgorithm")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<int?>("SignatureCertificateId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TimeoutSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TlsCertificateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EncryptionCertificateId");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.HasIndex("PreviousSignatureCertificateId");
+
+                    b.HasIndex("SignatureCertificateId");
+
+                    b.HasIndex("TlsCertificateId");
+
+                    b.ToTable("Connections");
                 });
 
             modelBuilder.Entity("AS24Net.Domain.Identity", b =>
@@ -372,15 +479,8 @@ namespace AS24Net.Entity.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
-                    b.Property<bool>("CompressBeforeSigning")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("CompressMessages")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Contacts")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
+                    b.Property<int>("ConnectionId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("ContentType")
                         .IsRequired()
@@ -397,90 +497,23 @@ namespace AS24Net.Entity.Migrations
                     b.Property<bool>("Enabled")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("EncryptMessages")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("EncryptionAlgorithm")
-                        .IsRequired()
-                        .HasMaxLength(15)
-                        .HasColumnType("character varying(15)");
-
-                    b.Property<int?>("EncryptionCertificateId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("HttpPassword")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<string>("HttpUserName")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("MdnMode")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)");
-
-                    b.Property<int>("MdnTimeoutMinutes")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
-                    b.Property<int?>("PreviousSignatureCertificateId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("RequestSignedMdn")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("RequireEncryptedMessages")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("RequireSignedMessages")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("SignMessages")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("SignatureAlgorithm")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)");
-
-                    b.Property<int?>("SignatureCertificateId")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Subject")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
-
-                    b.Property<int>("TimeoutSeconds")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("TlsCertificateId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Url")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("As2Id")
                         .IsUnique();
 
+                    b.HasIndex("ConnectionId");
+
                     b.HasIndex("DefaultIdentityId");
-
-                    b.HasIndex("EncryptionCertificateId");
-
-                    b.HasIndex("PreviousSignatureCertificateId");
-
-                    b.HasIndex("SignatureCertificateId");
-
-                    b.HasIndex("TlsCertificateId");
 
                     b.ToTable("Partners");
                 });
@@ -768,14 +801,45 @@ namespace AS24Net.Entity.Migrations
                         .HasForeignKey("CertificateId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("AS24Net.Domain.Partner", "Partner")
+                    b.HasOne("AS24Net.Domain.Connection", "Connection")
                         .WithMany()
-                        .HasForeignKey("PartnerId")
+                        .HasForeignKey("ConnectionId")
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Certificate");
 
-                    b.Navigation("Partner");
+                    b.Navigation("Connection");
+                });
+
+            modelBuilder.Entity("AS24Net.Domain.Connection", b =>
+                {
+                    b.HasOne("AS24Net.Domain.Certificate", "EncryptionCertificate")
+                        .WithMany()
+                        .HasForeignKey("EncryptionCertificateId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("AS24Net.Domain.Certificate", "PreviousSignatureCertificate")
+                        .WithMany()
+                        .HasForeignKey("PreviousSignatureCertificateId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("AS24Net.Domain.Certificate", "SignatureCertificate")
+                        .WithMany()
+                        .HasForeignKey("SignatureCertificateId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("AS24Net.Domain.Certificate", "TlsCertificate")
+                        .WithMany()
+                        .HasForeignKey("TlsCertificateId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("EncryptionCertificate");
+
+                    b.Navigation("PreviousSignatureCertificate");
+
+                    b.Navigation("SignatureCertificate");
+
+                    b.Navigation("TlsCertificate");
                 });
 
             modelBuilder.Entity("AS24Net.Domain.Identity", b =>
@@ -823,40 +887,20 @@ namespace AS24Net.Entity.Migrations
 
             modelBuilder.Entity("AS24Net.Domain.Partner", b =>
                 {
+                    b.HasOne("AS24Net.Domain.Connection", "Connection")
+                        .WithMany("Partners")
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("AS24Net.Domain.Identity", "DefaultIdentity")
                         .WithMany()
                         .HasForeignKey("DefaultIdentityId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("AS24Net.Domain.Certificate", "EncryptionCertificate")
-                        .WithMany()
-                        .HasForeignKey("EncryptionCertificateId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("AS24Net.Domain.Certificate", "PreviousSignatureCertificate")
-                        .WithMany()
-                        .HasForeignKey("PreviousSignatureCertificateId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("AS24Net.Domain.Certificate", "SignatureCertificate")
-                        .WithMany()
-                        .HasForeignKey("SignatureCertificateId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("AS24Net.Domain.Certificate", "TlsCertificate")
-                        .WithMany()
-                        .HasForeignKey("TlsCertificateId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                    b.Navigation("Connection");
 
                     b.Navigation("DefaultIdentity");
-
-                    b.Navigation("EncryptionCertificate");
-
-                    b.Navigation("PreviousSignatureCertificate");
-
-                    b.Navigation("SignatureCertificate");
-
-                    b.Navigation("TlsCertificate");
                 });
 
             modelBuilder.Entity("AS24Net.Domain.ReceivedMessage", b =>
@@ -874,6 +918,11 @@ namespace AS24Net.Entity.Migrations
                     b.Navigation("Identity");
 
                     b.Navigation("Partner");
+                });
+
+            modelBuilder.Entity("AS24Net.Domain.Connection", b =>
+                {
+                    b.Navigation("Partners");
                 });
 #pragma warning restore 612, 618
         }

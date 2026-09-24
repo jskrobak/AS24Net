@@ -77,9 +77,9 @@ public class As2Sender(
         var outbound = As2MessageBuilder.Build(options);
 
         logger.LogInformation("Sending {FileName} ({Size} bytes) to {Partner} at {Url} as {MessageId}",
-            message.FileName, payload.Length, partner.Name, partner.Url, outbound.MessageId);
+            message.FileName, payload.Length, partner.Name, partner.Connection.Url, outbound.MessageId);
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, partner.Url);
+        using var request = new HttpRequestMessage(HttpMethod.Post, partner.Connection.Url);
         request.Content = new ByteArrayContent(outbound.Body);
         foreach (var (name, value) in outbound.Headers)
         {
@@ -89,7 +89,7 @@ public class As2Sender(
                 request.Headers.TryAddWithoutValidation(name, value);
         }
 
-        using var client = httpClients.CreateClient(partner);
+        using var client = httpClients.CreateClient(partner.Connection);
         HttpResponseMessage response;
         try
         {
@@ -97,7 +97,7 @@ public class As2Sender(
         }
         catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new As2TransferException($"The partner did not answer within {partner.TimeoutSeconds} s.", retry: true, ex);
+            throw new As2TransferException($"The partner did not answer within {partner.Connection.TimeoutSeconds} s.", retry: true, ex);
         }
 
         using (response)
@@ -113,13 +113,13 @@ public class As2Sender(
             message.Signed = outbound.Signed;
             message.Encrypted = outbound.Encrypted;
             message.Compressed = outbound.Compressed;
-            message.MdnMode = partner.MdnMode;
+            message.MdnMode = partner.Connection.MdnMode;
             message.LastError = null;
             message.Partner = partner;
             message.Identity = identity;
             MdnOutcome? outcome = null;
 
-            switch (partner.MdnMode)
+            switch (partner.Connection.MdnMode)
             {
                 case MdnMode.None:
                     message.Status = OutgoingStatus.Delivered;
@@ -141,7 +141,7 @@ public class As2Sender(
                     Mdn mdn;
                     try
                     {
-                        mdn = MdnProcessor.Read(headers, body, As2Certificates.SignatureCertificates(partner), partner.RequestSignedMdn);
+                        mdn = MdnProcessor.Read(headers, body, As2Certificates.SignatureCertificates(partner), partner.Connection.RequestSignedMdn);
                     }
                     catch (As2ProcessingException ex)
                     {
@@ -164,28 +164,28 @@ public class As2Sender(
     private static As2OutboundOptions CreateOptions(OutgoingMessage message, Partner partner, Identity identity, byte[] payload,
         GlobalSettings settings)
     {
-        var signing = partner.SignMessages
+        var signing = partner.Connection.SignMessages
             ? As2Certificates.SigningCertificate(identity)
               ?? throw new As2TransferException($"Identity {identity.Name} has no signing certificate with a private key.", retry: false)
             : null;
-        var encryption = partner.EncryptMessages
-            ? partner.EncryptionCertificate is { } certificate
+        var encryption = partner.Connection.EncryptMessages
+            ? partner.Connection.EncryptionCertificate is { } certificate
                 ? Certificates.CertificateLoader.Load(certificate)
                 : throw new As2TransferException($"Partner {partner.Name} has no encryption certificate.", retry: false)
             : null;
 
         MdnRequest? mdn = null;
-        if (partner.MdnMode != MdnMode.None)
+        if (partner.Connection.MdnMode != MdnMode.None)
         {
-            if (partner.MdnMode == MdnMode.Async && string.IsNullOrWhiteSpace(settings.PublicUrl))
+            if (partner.Connection.MdnMode == MdnMode.Async && string.IsNullOrWhiteSpace(settings.PublicUrl))
                 throw new As2TransferException("An asynchronous MDN needs the public URL of this server (Settings).", retry: false);
 
             mdn = new MdnRequest
             {
                 NotificationTo = string.IsNullOrWhiteSpace(identity.Email) ? identity.As2Id : identity.Email,
-                ReturnUrl = partner.MdnMode == MdnMode.Async ? settings.PublicUrl : null,
-                Signed = partner.RequestSignedMdn,
-                MicAlgorithms = [partner.SignatureAlgorithm],
+                ReturnUrl = partner.Connection.MdnMode == MdnMode.Async ? settings.PublicUrl : null,
+                Signed = partner.Connection.RequestSignedMdn,
+                MicAlgorithms = [partner.Connection.SignatureAlgorithm],
             };
         }
 
@@ -198,12 +198,12 @@ public class As2Sender(
             Payload = payload,
             ContentType = message.ContentType,
             FileName = message.FileName,
-            Compress = partner.CompressMessages,
-            CompressBeforeSigning = partner.CompressBeforeSigning,
+            Compress = partner.Connection.CompressMessages,
+            CompressBeforeSigning = partner.Connection.CompressBeforeSigning,
             SigningCertificate = signing,
-            SignatureAlgorithm = partner.SignatureAlgorithm,
+            SignatureAlgorithm = partner.Connection.SignatureAlgorithm,
             EncryptionCertificate = encryption,
-            EncryptionAlgorithm = partner.EncryptionAlgorithm,
+            EncryptionAlgorithm = partner.Connection.EncryptionAlgorithm,
             Mdn = mdn,
             Host = HostOf(settings.PublicUrl),
         };

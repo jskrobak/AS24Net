@@ -15,6 +15,7 @@ namespace AS24Net.Entity;
 public class A24DbContext(DbContextOptions options, IDataProtectionProvider? dataProtectionProvider = null)
     : Havit.Data.EntityFrameworkCore.DbContext(options)
 {
+    public DbSet<Connection> Connections { get; init; }
     public DbSet<Partner> Partners { get; init; }
     public DbSet<Identity> Identities { get; init; }
     public DbSet<Certificate> Certificates { get; init; }
@@ -53,13 +54,21 @@ public class A24DbContext(DbContextOptions options, IDataProtectionProvider? dat
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.As2Id).IsUnique();
             entity.HasOne(e => e.DefaultIdentity).WithMany().OnDelete(DeleteBehavior.SetNull);
+            // A connection is deleted only when no partner uses it any more.
+            entity.HasOne(e => e.Connection).WithMany(c => c.Partners).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Connection>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Name).IsUnique();
             entity.HasOne(e => e.SignatureCertificate).WithMany().OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(e => e.PreviousSignatureCertificate).WithMany().OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(e => e.EncryptionCertificate).WithMany().OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(e => e.TlsCertificate).WithMany().OnDelete(DeleteBehavior.SetNull);
             // Stored as text so the table stays readable without the application.
             entity.Property(e => e.MdnMode).HasConversion<string>().HasMaxLength(10);
-            // Only read and written together with the partner. Plain JSON, not owned entities: the Havit unit of work
+            // Only read and written together with the connection. Plain JSON, not owned entities: the Havit unit of work
             // does not support owned types.
             JsonColumn(entity.Property(e => e.Contacts));
         });
@@ -72,7 +81,7 @@ public class A24DbContext(DbContextOptions options, IDataProtectionProvider? dat
         modelBuilder.Entity<CertificateChange>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.HasOne(e => e.Partner).WithMany().OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(e => e.Connection).WithMany().OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(e => e.Certificate).WithMany().OnDelete(DeleteBehavior.SetNull);
             entity.Property(e => e.Usage).HasConversion<string>().HasMaxLength(30);
             entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
@@ -167,7 +176,7 @@ public class A24DbContext(DbContextOptions options, IDataProtectionProvider? dat
             : new SecretValueConverter(dataProtectionProvider.CreateProtector(SecretValueConverter.PurposeName));
 
         modelBuilder.Entity<Certificate>().Property(e => e.Password).HasMaxLength(1000).HasConversion((ValueConverter?)converter);
-        modelBuilder.Entity<Partner>().Property(e => e.HttpPassword).HasMaxLength(1000).HasConversion((ValueConverter?)converter);
+        modelBuilder.Entity<Connection>().Property(e => e.HttpPassword).HasMaxLength(1000).HasConversion((ValueConverter?)converter);
         modelBuilder.Entity<ApiToken>().Property(e => e.WebhookSecret).HasMaxLength(1000).HasConversion((ValueConverter?)converter);
         modelBuilder.Entity<OutgoingMessage>().Property(e => e.WebhookSecret).HasMaxLength(1000).HasConversion((ValueConverter?)converter);
     }

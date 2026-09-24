@@ -1,6 +1,6 @@
 namespace AS24Net.Domain;
 
-/// <summary>A contact of a partner, usually for problems with the AS2 connection (stored with the partner).</summary>
+/// <summary>A contact at a partner, usually for problems with the AS2 connection (stored with the connection).</summary>
 public class PartnerContact
 {
     public string Name { get; set; } = string.Empty;

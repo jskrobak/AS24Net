@@ -13,9 +13,12 @@ public interface ICertificateChangeRepository : IRepository<CertificateChange, i
     /// <summary>Scheduled changes whose time has come, the earliest first.</summary>
     Task<List<CertificateChange>> GetDueAsync(DateTime now, CancellationToken cancellationToken = default);
 
+    /// <summary>All changes of the connection with their certificates, the latest first.</summary>
+    Task<List<CertificateChange>> GetByConnectionAsync(int connectionId, CancellationToken cancellationToken = default);
+
     /// <summary>When the next scheduled change is due, <c>null</c> when none is scheduled.</summary>
     Task<DateTime?> GetNextScheduledAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Changes still waiting for their time, with partner and certificate.</summary>
+    /// <summary>Changes still waiting for their time, with connection and certificate.</summary>
     Task<List<CertificateChange>> GetScheduledAsync(CancellationToken cancellationToken = default);
 }

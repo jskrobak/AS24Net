@@ -1,0 +1,170 @@
+@page "/Connections"
+@rendermode InteractiveServer
+@using AS24Net.Core.Security
+@using AS24Net.DataLayer.Filters
+@using AS24Net.Domain
+<style>
+    .scrollable-table-container {
+        overflow: auto;
+        height: calc(100vh - 160px);
+    }
+</style>
+<HxModal @ref="connectionEditModal" ShowCloseButton="true" Size="ModalSize.ExtraLarge" Scrollable="true">
+    <HeaderTemplate>
+        @(currentConnection?.Id > 0 ? $"Connection {currentConnection.Name}" : "New connection")
+    </HeaderTemplate>
+    <BodyTemplate>
+        @if (currentConnection is not null)
+        {
+            <EditForm Model="@currentConnection" OnValidSubmit="SaveConnection">
+                <DataAnnotationsValidator />
+
+                <p class="small text-body-secondary">
+                    The server of one or more partners and what was agreed with it. Partners that differ only in their AS2 name share
+                    one connection, so their certificate is changed once for all of them.
+                </p>
+                <div class="row g-2">
+                    <div class="col-md-6"><HxInputText Label="Name" @bind-Value="@currentConnection.Name" /></div>
+                    <div class="col-md-6"><HxInputText Label="Description" @bind-Value="@currentConnection.Description" /></div>
+                    <div class="col-md-12"><HxInputText Label="URL" Hint="The partner's AS2 endpoint messages are posted to." @bind-Value="@currentConnection.Url" InputCssClass="a24-code" /></div>
+                    <div class="col-md-6"><HxInputText Label="Contact" @bind-Value="@currentConnection.ContactName" /></div>
+                    <div class="col-md-6"><HxInputText Label="Contact e-mail" @bind-Value="@currentConnection.ContactEmail" /></div>
+                    @if (currentConnection.Partners.Count > 0)
+                    {
+                        <div class="col-md-12 small text-body-secondary">
+                            Partners: @string.Join(", ", currentConnection.Partners.OrderBy(p => p.Name).Select(p => $"{p.Name} ({p.As2Id})"))
+                        </div>
+                    }
+                </div>
+
+                <h6 class="text-body-secondary mt-4">Messages we send</h6>
+                <div class="row g-2">
+                    <div class="col-md-3"><HxCheckbox Text="Sign" @bind-Value="@currentConnection.SignMessages" /></div>
+                    <div class="col-md-3">
+                        <HxSelect TItem="string" TValue="string" Label="Signature digest" Data="As2Algorithms.DigestAlgorithms"
+                                  @bind-Value="@currentConnection.SignatureAlgorithm" Nullable="false" Enabled="@currentConnection.SignMessages" />
+                    </div>
+                    <div class="col-md-3"><HxCheckbox Text="Encrypt" @bind-Value="@currentConnection.EncryptMessages" /></div>
+                    <div class="col-md-3">
+                        <HxSelect TItem="string" TValue="string" Label="Encryption" Data="As2Algorithms.EncryptionAlgorithms"
+                                  @bind-Value="@currentConnection.EncryptionAlgorithm" Nullable="false" Enabled="@currentConnection.EncryptMessages" />
+                    </div>
+                    <div class="col-md-3"><HxCheckbox Text="Compress (RFC 5402)" @bind-Value="@currentConnection.CompressMessages" /></div>
+                    <div class="col-md-9"><HxCheckbox Text="Compress before signing (recommended), otherwise the signed message" @bind-Value="@currentConnection.CompressBeforeSigning" Enabled="@currentConnection.CompressMessages" /></div>
+                    <div class="col-md-4">
+                        <HxSelect TItem="MdnMode" TValue="MdnMode" Label="MDN" Data="mdnModes" @bind-Value="@currentConnection.MdnMode" Nullable="false"
+                                  TextSelector="@(m => m switch { MdnMode.Sync => "Synchronous (in the HTTP response)", MdnMode.Async => "Asynchronous (posted to our URL)", _ => "None" })" />
+                    </div>
+                    <div class="col-md-4"><HxCheckbox Label="&nbsp;" Text="Request a signed MDN" @bind-Value="@currentConnection.RequestSignedMdn" Enabled="@(currentConnection.MdnMode != MdnMode.None)" /></div>
+                    <div class="col-md-4"><HxInputNumber Label="Asynchronous MDN within (minutes)" Hint="Otherwise the message is sent again." Decimals="0" @bind-Value="@currentConnection.MdnTimeoutMinutes" Enabled="@(currentConnection.MdnMode == MdnMode.Async)" /></div>
+                </div>
+
+                <h6 class="text-body-secondary mt-4">Messages we receive</h6>
+                <div class="row g-2">
+                    <div class="col-md-6"><HxCheckbox Text="Must be signed" @bind-Value="@currentConnection.RequireSignedMessages" /></div>
+                    <div class="col-md-6"><HxCheckbox Text="Must be encrypted" @bind-Value="@currentConnection.RequireEncryptedMessages" /></div>
+                </div>
+
+                <h6 class="text-body-secondary mt-4">Certificates of the partner</h6>
+                <div class="small text-body-secondary mb-2">
+                    Import them in <a href="Certificates">Certificates</a>, or upload a new one in advance with the time it is to be used from in
+                    <a href="@($"CertificateChanges?connection={currentConnection.Id}")">Certificate changes</a>.
+                </div>
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <HxSelect TItem="Certificate" TValue="int?" Label="Signature" Hint="Verifies the partner's messages and MDNs."
+                                  Data="certificates" @bind-Value="@currentConnection.SignatureCertificateId"
+                                  TextSelector="@CertificateText" ValueSelector="@(c => (int?)c.Id)" Nullable="true" NullText="-none-" />
+                        @if (currentConnection.PreviousSignatureCertificateId is { } previous)
+                        {
+                            <div class="small text-body-secondary">
+                                The previous one is accepted too: @(certificates.FirstOrDefault(c => c.Id == previous)?.Name)
+                                <HxButton Size="ButtonSize.Small" Color="ThemeColor.Link" Text="Stop accepting it"
+                                          OnClick="() => currentConnection.PreviousSignatureCertificateId = null" />
+                            </div>
+                        }
+                    </div>
+                    <div class="col-md-6">
+                        <HxSelect TItem="Certificate" TValue="int?" Label="Encryption" Hint="Our messages are encrypted for it."
+                                  Data="certificates" @bind-Value="@currentConnection.EncryptionCertificateId"
+                                  TextSelector="@CertificateText" ValueSelector="@(c => (int?)c.Id)" Nullable="true" NullText="-none-" />
+                    </div>
+                    <div class="col-md-6">
+                        <HxSelect TItem="Certificate" TValue="int?" Label="HTTPS server" Hint="Trusted for the partner's HTTPS (its own or its CA); empty: the system trust store."
+                                  Data="certificates" @bind-Value="@currentConnection.TlsCertificateId"
+                                  TextSelector="@CertificateText" ValueSelector="@(c => (int?)c.Id)" Nullable="true" NullText="-system trust store-" />
+                    </div>
+                </div>
+
+                <h6 class="text-body-secondary mt-4">HTTP</h6>
+                <div class="row g-2">
+                    <div class="col-md-4"><HxInputText Label="HTTP user name" Hint="Basic authentication, if the partner wants it." @bind-Value="@currentConnection.HttpUserName" /></div>
+                    <div class="col-md-4"><HxInputText Label="HTTP password" Type="InputType.Password" @bind-Value="@currentConnection.HttpPassword" /></div>
+                    <div class="col-md-4"><HxInputNumber Label="Timeout (seconds)" Hint="With a synchronous MDN the time until it arrives." Decimals="0" @bind-Value="@currentConnection.TimeoutSeconds" /></div>
+                </div>
+
+                <HxSubmit Color="ThemeColor.Primary" CssClass="mt-4">Save</HxSubmit>
+            </EditForm>
+        }
+    </BodyTemplate>
+</HxModal>
+
+<HxListLayout Title="Connections" TFilterModel="ConnectionFilter"
+              @bind-FilterModel="filterModel"
+              @bind-FilterModel:after="gridComponent.RefreshDataAsync">
+    <CommandsTemplate>
+        <HxButton Text="New connection" Color="ThemeColor.Primary" Icon="BootstrapIcon.PlusLg" OnClick="HandleNewItemClicked" />
+    </CommandsTemplate>
+    <FilterTemplate Context="filterContext">
+        <HxInputText Label="Name, URL or AS2 name of a partner" @bind-Value="filterContext.Name" />
+    </FilterTemplate>
+    <DataTemplate>
+        <HxGrid @ref="gridComponent"
+                ContentNavigationMode="GridContentNavigationMode.Pagination"
+                PageSize="1000"
+                TableContainerCssClass="scrollable-table-container"
+                HeaderRowCssClass="sticky-top"
+                TItem="Connection"
+                DataProvider="GetGridData"
+                SelectedDataItem="currentConnection"
+                SelectedDataItemChanged="HandleSelectedAsync"
+                Responsive="true"
+                PreserveSelection="false">
+            <Columns>
+                <HxGridColumn HeaderText="Name" ItemTextSelector="@(d => d.Name)" SortKeySelector="d => d.Name" IsDefaultSortColumn="true" />
+                <HxGridColumn HeaderText="URL" ItemTextSelector="@(d => d.Url)" SortKeySelector="d => d.Url" ItemCssClass="small"/>
+                <HxGridColumn HeaderText="Partners">
+                    <ItemTemplate Context="c">
+                        @foreach (var partner in c.Partners.OrderBy(p => p.As2Id))
+                        {
+                            <span class="a24-code me-2 @(partner.Enabled ? "" : "text-body-secondary text-decoration-line-through")" title="@partner.Name">@partner.As2Id</span>
+                        }
+                    </ItemTemplate>
+                </HxGridColumn>
+                <HxGridColumn HeaderText="Security">
+                    <ItemTemplate Context="c">
+                        @if (c.SignMessages) { <HxBadge Color="ThemeColor.Primary" CssClass="me-1">sign @c.SignatureAlgorithm</HxBadge> }
+                        @if (c.EncryptMessages) { <HxBadge Color="ThemeColor.Primary" CssClass="me-1">encrypt @c.EncryptionAlgorithm</HxBadge> }
+                        @if (c.CompressMessages) { <HxBadge Color="ThemeColor.Secondary" CssClass="me-1">compress</HxBadge> }
+                    </ItemTemplate>
+                </HxGridColumn>
+                <HxGridColumn HeaderText="MDN" SortKeySelector="d => d.MdnMode">
+                    <ItemTemplate Context="c">
+                        @c.MdnMode@(c.MdnMode != MdnMode.None && c.RequestSignedMdn ? ", signed" : "")
+                    </ItemTemplate>
+                </HxGridColumn>
+                <HxGridColumn HeaderText="Certificate" ItemTextSelector="@(d => CertificateValidity(d.SignatureCertificateId ?? d.EncryptionCertificateId))" ItemCssClass="small"/>
+
+                <HxContextMenuGridColumn Context="connection">
+                    <HxContextMenu>
+                        <HxContextMenuItem Text="Edit" Icon="BootstrapIcon.Pen" OnClick="async () => await HandleSelectedAsync(connection)" />
+                        <HxContextMenuItem Text="Add a partner" Icon="BootstrapIcon.PersonPlus" OnClick="@(() => Navigation.NavigateTo($"Partners?connection={connection.Id}"))" />
+                        <HxContextMenuItem Text="Schedule a certificate" Icon="BootstrapIcon.CalendarPlus" OnClick="@(() => Navigation.NavigateTo($"CertificateChanges?connection={connection.Id}"))" />
+                        <HxContextMenuItem Text="Delete" Icon="BootstrapIcon.Trash" OnClick="async () => await HandleDeleteClick(connection)"
+                                           ConfirmationQuestion="@($"Delete connection {connection.Name}?")"/>
+                    </HxContextMenu>
+                </HxContextMenuGridColumn>
+            </Columns>
+        </HxGrid>
+    </DataTemplate>
+</HxListLayout>

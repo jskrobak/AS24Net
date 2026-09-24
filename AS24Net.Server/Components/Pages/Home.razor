@@ -87,7 +87,7 @@
                             @foreach (var change in scheduled.Take(5))
                             {
                                 <HxListGroupItem CssClass="d-flex justify-content-between">
-                                    <span>@change.PartnerName</span>
+                                    <span>@change.ConnectionName</span>
                                     <span class="small text-body-secondary">@change.ActivateAt.ToString("g")</span>
                                 </HxListGroupItem>
                             }

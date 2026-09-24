@@ -21,8 +21,8 @@ public partial class CertificateChanges : ComponentBase
     [Inject] protected ITimeService TimeService { get; set; } = null!;
     [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = null!;
 
-    /// <summary>Opens the form for the partner right away (from the partner's menu).</summary>
-    [SupplyParameterFromQuery(Name = "partner")] public int? PartnerQuery { get; set; }
+    /// <summary>Opens the form for the connection right away (from the menu of the connection or of a partner).</summary>
+    [SupplyParameterFromQuery(Name = "connection")] public int? ConnectionQuery { get; set; }
 
     private static readonly PartnerCertificateUsage[] usages = Enum.GetValues<PartnerCertificateUsage>();
     private static readonly CertificateChangeStatus[] statuses = Enum.GetValues<CertificateChangeStatus>();
@@ -32,10 +32,10 @@ public partial class CertificateChanges : ComponentBase
     private HxGrid<CertificateChange> gridComponent = null!;
     private HxModal scheduleModal = null!;
     private HxInputFile? inputFileComponent;
-    private List<Partner> partners = [];
+    private List<Connection> connections = [];
     private List<Certificate> certificates = [];
 
-    private int? partnerId;
+    private int? connectionId;
     private PartnerCertificateUsage usage = PartnerCertificateUsage.SignatureAndEncryption;
     private DateTime activateAt;
     private bool uploadFile = true;
@@ -44,15 +44,18 @@ public partial class CertificateChanges : ComponentBase
 
     protected override async Task OnInitializedAsync()
     {
-        partners = await DataService.GetAllPartnersAsync();
+        connections = await DataService.GetAllConnectionsAsync();
         certificates = (await DataService.GetAllCertificatesAsync()).Where(c => !c.HasPrivateKey).ToList();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && PartnerQuery is { } partner && partners.Any(p => p.Id == partner))
-            await ShowScheduleAsync(partner);
+        if (firstRender && ConnectionQuery is { } connection && connections.Any(c => c.Id == connection))
+            await ShowScheduleAsync(connection);
     }
+
+    private static string ConnectionText(Connection c) =>
+        $"{c.Name} ({string.Join(", ", c.Partners.Select(p => p.As2Id).Order(StringComparer.Ordinal))})";
 
     private async Task<GridDataProviderResult<CertificateChange>> GetGridData(GridDataProviderRequest<CertificateChange> request)
     {
@@ -60,9 +63,9 @@ public partial class CertificateChanges : ComponentBase
         return new GridDataProviderResult<CertificateChange> { Data = response.Data, TotalCount = response.TotalCount };
     }
 
-    private async Task ShowScheduleAsync(int? partner)
+    private async Task ShowScheduleAsync(int? connection)
     {
-        partnerId = partner;
+        connectionId = connection;
         usage = PartnerCertificateUsage.SignatureAndEncryption;
         // A whole hour, a week ahead: a usual announcement of a partner.
         var now = TimeService.GetCurrentTime();
@@ -75,9 +78,9 @@ public partial class CertificateChanges : ComponentBase
 
     private async Task HandleScheduleAsync()
     {
-        if (partnerId is null)
+        if (connectionId is null)
         {
-            Messenger.AddWarning("Select the partner.");
+            Messenger.AddWarning("Select the connection.");
             return;
         }
 
@@ -94,7 +97,7 @@ public partial class CertificateChanges : ComponentBase
             return;
         }
 
-        await ScheduleAsync(() => ChangeService.ScheduleAsync(partnerId.Value, certificateId.Value, usage, activateAt, note, UserName()));
+        await ScheduleAsync(() => ChangeService.ScheduleAsync(connectionId.Value, certificateId.Value, usage, activateAt, note, UserName()));
     }
 
     private async Task HandleFileUploaded(FileUploadedEventArgs uploaded)
@@ -106,7 +109,7 @@ public partial class CertificateChanges : ComponentBase
         }
 
         var data = await UploadService.ReadAllBytesAsync(uploaded.ResponseText.Replace("\"", ""));
-        await ScheduleAsync(() => ChangeService.ScheduleFileAsync(partnerId!.Value, data, uploaded.OriginalFileName, usage, activateAt, note, UserName()));
+        await ScheduleAsync(() => ChangeService.ScheduleFileAsync(connectionId!.Value, data, uploaded.OriginalFileName, usage, activateAt, note, UserName()));
     }
 
     private async Task ScheduleAsync(Func<Task<CertificateChange>> schedule)

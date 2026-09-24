@@ -34,6 +34,12 @@ public static class ServiceCollectionExtensions
         
         services.AddDataLayerCoreServices();
         
+        //Connection
+        services.TryAddScoped<IConnectionRepository, ConnectionRepository>();
+        services.TryAddScoped<IRepository<Connection, int>>(sp => sp.GetRequiredService<IConnectionRepository>());
+        services.TryAddTransient<IEntityKeyAccessor<Connection, int>, DbEntityKeyAccessor<Connection, int>>();
+        services.TryAddSingleton<IRepositoryQueryProvider<Connection, int>, ConnectionDbRepositoryQueryProvider>();
+
         //Partner
         services.TryAddScoped<IPartnerRepository, PartnerRepository>();
         services.TryAddScoped<IRepository<Partner, int>>(sp => sp.GetRequiredService<IPartnerRepository>());

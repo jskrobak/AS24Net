@@ -86,7 +86,7 @@ public class AsyncMdnService(
 
                 // Only a verified signature proves that the partner sent the message; otherwise anybody using its AS2
                 // name could make this server post to any address.
-                if (!message.Signed && !SameHost(message.MdnUrl, partner.Url))
+                if (!message.Signed && !SameHost(message.MdnUrl, partner.Connection.Url))
                 {
                     message.MdnRetryCount = settings.MaxMdnRetryCount;
                     throw new InvalidOperationException(
@@ -151,7 +151,7 @@ public class AsyncMdnService(
                 request.Headers.TryAddWithoutValidation(name, value);
         }
 
-        using var client = httpClients.CreateClient(partner);
+        using var client = httpClients.CreateClient(partner.Connection);
         using var response = await client.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
             throw new HttpRequestException($"The partner answered HTTP {(int)response.StatusCode} {response.ReasonPhrase}.");

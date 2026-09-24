@@ -17,25 +17,25 @@ public sealed class As2HttpClientProvider : IDisposable
 {
     private readonly ConcurrentDictionary<string, SocketsHttpHandler> _handlers = new();
 
-    /// <summary>A client for one request to the partner; dispose it, the connections stay pooled.</summary>
-    public HttpClient CreateClient(Partner partner)
+    /// <summary>A client for one request to a partner of the connection; dispose it, the connections stay pooled.</summary>
+    public HttpClient CreateClient(Connection connection)
     {
-        var trusted = partner.TlsCertificate;
+        var trusted = connection.TlsCertificate;
         var key = trusted?.Thumbprint ?? trusted?.Id.ToString() ?? "";
         var handler = _handlers.GetOrAdd(key, _ => CreateHandler(trusted));
 
         var client = new HttpClient(handler, disposeHandler: false)
         {
-            Timeout = TimeSpan.FromSeconds(partner.TimeoutSeconds),
+            Timeout = TimeSpan.FromSeconds(connection.TimeoutSeconds),
         };
         client.DefaultRequestHeaders.UserAgent.ParseAdd($"{As2Headers.Product}/1.0");
-        if (!string.IsNullOrEmpty(partner.HttpUserName))
+        if (!string.IsNullOrEmpty(connection.HttpUserName))
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic",
-                Convert.ToBase64String(Encoding.UTF8.GetBytes($"{partner.HttpUserName}:{partner.HttpPassword}")));
+                Convert.ToBase64String(Encoding.UTF8.GetBytes($"{connection.HttpUserName}:{connection.HttpPassword}")));
         return client;
     }
 
-    /// <summary>Forgets the pooled connections, e.g. after the trusted certificate of a partner changed.</summary>
+    /// <summary>Forgets the pooled connections, e.g. after the trusted certificate of a connection changed.</summary>
     public void Reset()
     {
         foreach (var key in _handlers.Keys.ToList())

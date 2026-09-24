@@ -17,9 +17,10 @@
             Upload the new certificate the partner announced and the time it starts using it. Until then the current
             certificate stays in use; from then on the new one is used, and the signature certificate it replaces is still
             accepted for messages and MDNs that were on their way. A time that has passed applies the certificate right away.
+            The certificate belongs to the connection, so it is used for all the partners reached through it.
         </p>
-        <HxSelect TItem="Partner" TValue="int?" Label="Partner" Data="partners" @bind-Value="partnerId"
-                  TextSelector="@(p => $"{p.Name} ({p.As2Id})")" ValueSelector="@(p => (int?)p.Id)" Nullable="true" NullText="-select-" />
+        <HxSelect TItem="Connection" TValue="int?" Label="Connection" Data="connections" @bind-Value="connectionId"
+                  TextSelector="@ConnectionText" ValueSelector="@(c => (int?)c.Id)" Nullable="true" NullText="-select-" />
         <HxSelect TItem="PartnerCertificateUsage" TValue="PartnerCertificateUsage" Label="Used for" Data="usages" @bind-Value="usage"
                   TextSelector="@(u => CertificateChangeService.Describe(u))" Nullable="false" />
 
@@ -55,7 +56,7 @@
         <HxButton Text="Schedule a certificate" Color="ThemeColor.Primary" Icon="BootstrapIcon.CalendarPlus" OnClick="() => ShowScheduleAsync(null)" />
     </CommandsTemplate>
     <FilterTemplate Context="filterContext">
-        <HxInputText Label="Partner" @bind-Value="filterContext.PartnerName" />
+        <HxInputText Label="Connection" @bind-Value="filterContext.ConnectionName" />
         <HxSelect TItem="CertificateChangeStatus" TValue="CertificateChangeStatus?" Label="State" Data="statuses"
                   @bind-Value="filterContext.Status" ValueSelector="@(s => (CertificateChangeStatus?)s)" Nullable="true" NullText="All" />
     </FilterTemplate>
@@ -71,7 +72,7 @@
             <Columns>
                 <HxGridColumn HeaderText="Used from" ItemTextSelector="@(c => c.ActivateAt.ToString("g"))" SortKeySelector="c => c.ActivateAt"
                               IsDefaultSortColumn="true" SortDirection="Havit.Collections.SortDirection.Descending" ItemCssClass="text-nowrap" />
-                <HxGridColumn HeaderText="Partner" ItemTextSelector="@(c => c.PartnerName)" SortKeySelector="c => c.PartnerName" />
+                <HxGridColumn HeaderText="Connection" ItemTextSelector="@(c => c.ConnectionName)" SortKeySelector="c => c.ConnectionName" />
                 <HxGridColumn HeaderText="Used for" ItemTextSelector="@(c => CertificateChangeService.Describe(c.Usage))" SortKeySelector="c => c.Usage" />
                 <HxGridColumn HeaderText="Certificate">
                     <ItemTemplate Context="c">
@@ -102,7 +103,7 @@
                         @if (change.Status == CertificateChangeStatus.Scheduled)
                         {
                             <HxContextMenuItem Text="Cancel" Icon="BootstrapIcon.XCircle" OnClick="async () => await HandleCancelAsync(change)"
-                                               ConfirmationQuestion="@($"Cancel the certificate change of {change.PartnerName} at {change.ActivateAt:g}?")" />
+                                               ConfirmationQuestion="@($"Cancel the certificate change of {change.ConnectionName} at {change.ActivateAt:g}?")" />
                         }
                         @if (change.CertificateId is { } id)
                         {

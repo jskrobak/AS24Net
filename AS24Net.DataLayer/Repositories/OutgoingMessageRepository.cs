@@ -27,7 +27,7 @@ public class OutgoingMessageRepository(
         CancellationToken cancellationToken = default)
     {
         var filtered = filter.Apply(Data
-            .Include(m => m.Partner)
+            .Include(m => m.Partner).ThenInclude(p => p.Connection)
             .Include(m => m.Identity));
 
         var cnt = await filtered.CountAsync(cancellationToken);
@@ -46,7 +46,7 @@ public class OutgoingMessageRepository(
         var now = timeService.GetCurrentTime();
         return Data
             .Where(m => (m.Status == OutgoingStatus.New || m.Status == OutgoingStatus.Error) && m.NextRetry <= now)
-            .Include(m => m.Partner)
+            .Include(m => m.Partner).ThenInclude(p => p.Connection)
             .Include(m => m.Identity)
             .OrderBy(m => m.NextRetry)
             .ThenBy(m => m.Id)
@@ -62,7 +62,7 @@ public class OutgoingMessageRepository(
             .OrderByDescending(m => m.Id)
             .Skip(skip)
             .Take(take)
-            .Include(m => m.Partner)
+            .Include(m => m.Partner).ThenInclude(p => p.Connection)
             .Include(m => m.Identity)
             .ToListAsync(cancellationToken);
 
@@ -70,18 +70,18 @@ public class OutgoingMessageRepository(
     }
 
     public Task<OutgoingMessage?> FindWithRefsAsync(int id, CancellationToken cancellationToken = default) => Data
-        .Include(m => m.Partner)
+        .Include(m => m.Partner).ThenInclude(p => p.Connection)
         .Include(m => m.Identity)
         .FirstOrDefaultAsync(m => m.Id == id, cancellationToken);
 
     public Task<OutgoingMessage?> FindByMessageIdAsync(string messageId, CancellationToken cancellationToken = default) => Data
-        .Include(m => m.Partner)
+        .Include(m => m.Partner).ThenInclude(p => p.Connection)
         .Include(m => m.Identity)
         .FirstOrDefaultAsync(m => m.MessageId == messageId, cancellationToken);
 
     public Task<List<OutgoingMessage>> GetAwaitingMdnAsync(CancellationToken cancellationToken = default) => Data
         .Where(m => m.Status == OutgoingStatus.Sent)
-        .Include(m => m.Partner)
+        .Include(m => m.Partner).ThenInclude(p => p.Connection)
         .ToListAsync(cancellationToken);
 
     public Task<int> CountWaitingAsync(DateTime createdBefore, CancellationToken cancellationToken = default) => Data
@@ -96,7 +96,7 @@ public class OutgoingMessageRepository(
     public Task<List<OutgoingMessage>> GetFinishedAsync(DateTime createdBefore, int take, CancellationToken cancellationToken = default) => Data
         .AsNoTracking()
         .Where(m => (m.Status == OutgoingStatus.Delivered || m.Status == OutgoingStatus.NotDelivered) && m.Created < createdBefore)
-        .Include(m => m.Partner)
+        .Include(m => m.Partner).ThenInclude(p => p.Connection)
         .Include(m => m.Identity)
         .OrderBy(m => m.Id)
         .Take(take)

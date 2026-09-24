@@ -20,6 +20,7 @@ public partial class ApiTokens : ComponentBase
     private DateTime? newExpiresAt;
     private string newWebhookUrl = "";
     private string newWebhookSecret = "";
+    private bool newAllowConfiguration;
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -32,6 +33,7 @@ public partial class ApiTokens : ComponentBase
         newExpiresAt = null;
         newWebhookUrl = "";
         newWebhookSecret = "";
+        newAllowConfiguration = false;
         await editModal.ShowAsync();
     }
 
@@ -45,7 +47,7 @@ public partial class ApiTokens : ComponentBase
 
         try
         {
-            var (_, value) = await TokenService.CreateAsync(newName, newExpiresAt, newWebhookUrl, newWebhookSecret);
+            var (_, value) = await TokenService.CreateAsync(newName, newExpiresAt, newWebhookUrl, newWebhookSecret, newAllowConfiguration);
             createdToken = value;
         }
         catch (InvalidOperationException ex)

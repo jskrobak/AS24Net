@@ -17,7 +17,8 @@ public class ApiTokenService(
 
     /// <summary>Creates a token and returns it; this is the only time the full token is available.</summary>
     public async Task<(ApiToken Token, string Value)> CreateAsync(string name, DateTime? expiresAt = null,
-        string? inboxWebhookUrl = null, string? webhookSecret = null, CancellationToken cancellationToken = default)
+        string? inboxWebhookUrl = null, string? webhookSecret = null, bool allowConfiguration = false,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new InvalidOperationException("The token needs a name.");
@@ -32,6 +33,7 @@ public class ApiTokenService(
             ExpiresAt = expiresAt,
             InboxWebhookUrl = string.IsNullOrWhiteSpace(inboxWebhookUrl) ? null : inboxWebhookUrl.Trim(),
             WebhookSecret = string.IsNullOrWhiteSpace(webhookSecret) ? null : webhookSecret,
+            AllowConfiguration = allowConfiguration,
         };
 
         unitOfWork.AddForInsert(token);

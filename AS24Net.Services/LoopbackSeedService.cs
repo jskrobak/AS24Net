@@ -48,26 +48,35 @@ public class LoopbackSeedService(
         unitOfWork.AddRangeForInsert([a, b]);
 
         // Each station is the partner of the other one: messages from A to B arrive here as messages of partner A.
+        var sync = Connection("Loopback (synchronous MDN)", options.Url, certificate, MdnMode.Sync);
+        var async = Connection("Loopback (asynchronous MDN)", options.Url, certificate, MdnMode.Async);
+        unitOfWork.AddRangeForInsert([sync, async]);
         unitOfWork.AddRangeForInsert([
-            Partner("Loopback A", options.StationA, options.Url, certificate, b, MdnMode.Sync),
-            Partner("Loopback B", options.StationB, options.Url, certificate, a, MdnMode.Async),
+            Partner("Loopback A", options.StationA, sync, b),
+            Partner("Loopback B", options.StationB, async, a),
         ]);
         await unitOfWork.CommitAsync(cancellationToken);
 
         logger.LogWarning("Created the loopback stations {A} and {B} at {Url} for development", options.StationA, options.StationB, options.Url);
     }
 
-    private static Partner Partner(string name, string as2Id, string url, Certificate certificate, Identity sender, MdnMode mdn) => new()
+    private static Connection Connection(string name, string url, Certificate certificate, MdnMode mdn) => new()
     {
         Name = name,
-        As2Id = as2Id,
         Url = url,
-        DefaultIdentity = sender,
-        ContentType = "application/edifact",
         SignatureCertificate = certificate,
         EncryptionCertificate = certificate,
         CompressMessages = true,
         MdnMode = mdn,
         MdnTimeoutMinutes = 10,
+    };
+
+    private static Partner Partner(string name, string as2Id, Connection connection, Identity sender) => new()
+    {
+        Name = name,
+        As2Id = as2Id,
+        Connection = connection,
+        DefaultIdentity = sender,
+        ContentType = "application/edifact",
     };
 }

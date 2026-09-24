@@ -46,7 +46,8 @@ public class MessageQueueService(
 {
     public async Task<OutgoingMessage> QueueAsync(QueueRequest request, CancellationToken cancellationToken = default)
     {
-        var partner = await partnerRepository.GetObjectAsync(request.PartnerId, cancellationToken);
+        var partner = await partnerRepository.FindWithRefsAsync(request.PartnerId, cancellationToken)
+                      ?? throw new InvalidOperationException($"Partner {request.PartnerId} does not exist.");
         var identity = await ResolveIdentityAsync(partner, request.IdentityId, cancellationToken);
 
         var file = new FileInfo(request.FilePath);
@@ -70,7 +71,7 @@ public class MessageQueueService(
             Subject = string.IsNullOrWhiteSpace(request.Subject) ? null : Limit(request.Subject.Trim(), 200),
             Size = file.Length,
             Status = OutgoingStatus.New,
-            MdnMode = partner.MdnMode,
+            MdnMode = partner.Connection.MdnMode,
             Reference = string.IsNullOrWhiteSpace(request.Reference) ? null : Limit(request.Reference.Trim(), 100),
             WebhookUrl = string.IsNullOrWhiteSpace(request.WebhookUrl) ? null : request.WebhookUrl.Trim(),
             WebhookSecret = string.IsNullOrEmpty(request.WebhookSecret) ? null : request.WebhookSecret,

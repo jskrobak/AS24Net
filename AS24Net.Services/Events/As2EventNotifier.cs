@@ -159,16 +159,22 @@ public class As2EventNotifier(
             message.Partner, message.As2From, e => Describe(e, message));
     }
 
-    public void CertificateApplied(CertificateChange change, Partner partner)
+    /// <summary>
+    /// A scheduled certificate was put in place in the connection, for all its partners: <c>partnerName</c> is the
+    /// name of the connection and <c>partnerAs2Id</c> the AS2 names of its partners, separated by commas.
+    /// </summary>
+    public void CertificateApplied(CertificateChange change, Connection connection)
     {
+        var as2Ids = string.Join(",", connection.Partners.Select(p => p.As2Id).Order(StringComparer.Ordinal));
         Record(TransferEventCategory.Certificate, TransferEventType.CertificateChangeApplied, TransferEventLevel.Information,
-            $"Certificate {change.Certificate?.Name} is used for {Certificates.CertificateChangeService.Describe(change.Usage)} of partner {partner.Name} from now on",
-            partner);
+            $"Certificate {change.Certificate?.Name} is used for {Certificates.CertificateChangeService.Describe(change.Usage)} of connection {connection.Name} from now on",
+            null, connection.Name);
 
         hooks.Dispatch(HookEvent.OnCertificateApplied, new Dictionary<string, string?>
         {
-            ["partnerName"] = partner.Name,
-            ["partnerAs2Id"] = partner.As2Id,
+            ["connectionName"] = connection.Name,
+            ["partnerName"] = connection.Name,
+            ["partnerAs2Id"] = as2Ids,
             ["certificateId"] = change.CertificateId?.ToString(CultureInfo.InvariantCulture),
             ["certificateName"] = change.Certificate?.Name,
             ["certificateThumbprint"] = change.Certificate?.Thumbprint,
@@ -178,8 +184,8 @@ public class As2EventNotifier(
         Global(new WebhookPayload
         {
             Event = CertificateAppliedEvent,
-            PartnerName = partner.Name,
-            PartnerAs2Id = partner.As2Id,
+            PartnerName = connection.Name,
+            PartnerAs2Id = as2Ids,
             Status = change.Usage.ToString(),
         });
     }
@@ -200,7 +206,7 @@ public class As2EventNotifier(
         e.FileSize = message.Size;
         e.OutgoingMessageId = message.Id;
         e.DurationMs = durationMs;
-        e.RemoteEndPoint = message.Partner?.Url;
+        e.RemoteEndPoint = message.Partner?.Connection?.Url;
     }
 
     private static void Describe(TransferEvent e, ReceivedMessage message)

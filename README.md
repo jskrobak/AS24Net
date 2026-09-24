@@ -29,7 +29,9 @@ HTTP instead of OFTP2.
   interactive documentation (OpenAPI, Scalar)
 - Scripts run on events (hooks), webhooks per message, per API token and for the whole server
 - Persistent transfer log: outgoing, incoming, MDNs, certificate changes, hooks and webhooks
-- Web UI: identities, partners, certificate changes, certificates, outgoing and received messages, settings, API
+- Partners that differ only in their AS2 name (several plants behind one server) share one *connection*: URL,
+  security, MDN and certificates are set, and a certificate is changed, once for all of them
+- Web UI: identities, partners, connections, certificate changes, certificates, outgoing and received messages, settings, API
   tokens, users and a live log, in a light and a dark theme
 - Signing in with a password or with Microsoft Entra ID, where the list of users decides who may come in
 - Health checks for Docker, Kubernetes and monitoring: database, storage, send service, certificates, certificate
@@ -84,7 +86,7 @@ encrypted and compressed messages with every supported algorithm, synchronous an
 |---|---|
 | `ConnectionStrings:AS24Net` | PostgreSQL connection string (required) |
 | `Database:MigrateOnStartup` | Create / update the database schema on startup (default `true`) |
-| `DataProtection:KeysDirectory` | Keys encrypting the auth cookie and the secrets stored in the database (certificate passwords, HTTP passwords of partners, webhook secrets). **Back them up together with the database**, without them the stored secrets cannot be decrypted. |
+| `DataProtection:KeysDirectory` | Keys encrypting the auth cookie and the secrets stored in the database (certificate passwords, HTTP passwords of connections, webhook secrets). **Back them up together with the database**, without them the stored secrets cannot be decrypted. |
 | `DataDirectory` | Base directory for relative receive / outbox / archive directories (default: current directory, `/data` in Docker) |
 | `TimeZone` | Time zone of the application (IANA name, default `Europe/Prague`, `Local` for the one of the machine). All times are stored and shown in it, the times of certificate changes included. |
 | `LogDirectory` | Directory of the rolling log file |
@@ -121,9 +123,20 @@ A **partner** is a remote AS2 station:
 
 | Setting | Meaning |
 |---|---|
-| *AS2 name*, *URL* | the partner's `AS2-From` / our `AS2-To`, and its AS2 endpoint our messages are posted to |
+| *AS2 name* | the partner's `AS2-From` / our `AS2-To` |
+| *Connection* | the server the partner is reached at, see below |
 | *Default identity* | the identity we send from when a message names none |
 | *Content type* | media type of the payload when a message names none, e.g. `application/edifact`, `application/edi-x12`, `application/xml` |
+| *Subject* | subject of our messages; the file name when empty |
+| *Enabled* | a disabled partner gets no messages and its messages are refused |
+
+A **connection** is the partner's server and what was agreed with it. Partners that differ only in their AS2 name
+(e.g. several plants or divisions of one company behind one AS2 server with one certificate) share a connection, so
+its settings are kept, and its certificate is changed, in one place:
+
+| Setting | Meaning |
+|---|---|
+| *URL* | the AS2 endpoint our messages are posted to |
 | *Sign*, *Signature digest* | our messages are signed with the identity's signing certificate |
 | *Encrypt*, *Encryption* | our messages are encrypted for the partner's encryption certificate |
 | *Compress*, *Compress before signing* | zlib compression of the payload (recommended) or of the signed message |
@@ -131,6 +144,11 @@ A **partner** is a remote AS2 station:
 | *Must be signed*, *Must be encrypted* | messages of the partner that are not are refused with `insufficient-message-security` |
 | *Signature*, *Encryption*, *HTTPS server* certificates | the partner's certificates; the one it signed with before the last change is still accepted |
 | *HTTP user name / password*, *Timeout* | basic authentication and how long to wait for the answer (with a synchronous MDN, for the MDN) |
+| *Contact*, *Contact e-mail* | whom to ask at the partner |
+
+A database from before connections were introduced gets one connection per partner, named after it, with the
+partner's settings. Partners that share a server are put together by selecting one of the connections for all of
+them and deleting the ones left without a partner.
 
 A partner is found by the `AS2-From` of its messages and our identity by their `AS2-To`; a message for an unknown
 pair is refused with `unknown-trading-partner` (in a synchronous MDN only: an address from an unauthenticated
@@ -139,7 +157,8 @@ request is not posted to).
 ## Certificate changes
 
 Partners announce a new certificate some time before they start using it. *Certificate changes* takes the new
-certificate (`.cer`, `.crt`, `.pem`, or one stored already) with the date and time it is used from and what for:
+certificate (`.cer`, `.crt`, `.pem`, or one stored already) for a connection, so for all the partners reached
+through it, with the date and time it is used from and what for:
 
 | Used for | Replaces |
 |---|---|
@@ -151,7 +170,7 @@ certificate (`.cer`, `.crt`, `.pem`, or one stored already) with the date and ti
 Until that moment the current certificate stays in use. At that moment (to the second: a background scheduler
 sleeps until the next change) the new one is put in place. The signature certificate it replaces becomes the
 *previous* one and is still accepted, so that messages and MDNs signed just before the change are not refused; it
-can be dropped on the partner's page once the roll-over is over. A time that has passed applies the certificate
+can be dropped on the connection's page once the roll-over is over. A time that has passed applies the certificate
 right away, and a scheduled change can be cancelled until its time.
 
 Every change is written to *Logs → Certificates*, runs the hook `OnCertificateApplied` and calls the webhook
@@ -166,6 +185,9 @@ curl -H "Authorization: Bearer $TOKEN" -F file=@partner-2027.crt -F usage=Signat
      -F activateAt=2026-10-01T06:00 -F note="Announced by e-mail on 2026-09-20" \
      https://as2.example.com/api/v1/partners/PARTNER-AS2/certificate-changes
 ```
+
+`/api/v1/connections/{connection}/certificate-changes` does the same with the name of the connection; with a partner
+the change goes to the partner's connection.
 
 `activateAt` without an offset is the time of the application (`TimeZone`), with `Z` or an offset an instant.
 
@@ -350,7 +372,7 @@ readinessProbe:
 | `database` | the database cannot be reached or migrations are missing (`Database:MigrateOnStartup=false`); its size and the largest tables in bytes are in the data |
 | `storage` | the receive or outbox directory or the data protection keys cannot be written; degraded when disk space runs low |
 | `send-service` | the service stopped or has not processed the queue for three send intervals and a minute; degraded while paused |
-| `certificates` | degraded: a certificate in use (identities, partners) expired or expires within 30 days, unless a scheduled change replaces it in time |
+| `certificates` | degraded: a certificate in use (identities, connections with an enabled partner) expired or expires within 30 days, unless a scheduled change replaces it in time |
 | `certificate-changes` | degraded: a scheduled change is more than 10 minutes overdue, its certificate expires before its time, or a change failed within 7 days |
 | `messages` | degraded: a message waits to be sent for more than 24 hours, failed or was not delivered in the last 24 hours, an asynchronous MDN of ours could not be posted for an hour, or a message of a partner was refused in the last 24 hours |
 | `internal-queues` | degraded: the queue of the transfer log, the webhooks or the hooks is 80 % full and about to drop items |
@@ -371,7 +393,7 @@ Message-ID, severity, period) and a detail of every record:
 | Outgoing | messages sent, failed (with the next retry) and delivered without an MDN |
 | Incoming | messages received, refused and received again (duplicates) |
 | MDN | MDNs received for our messages (positive, negative, invalid, a different MIC, not in time) and MDNs we sent |
-| Certificates | certificate changes of partners scheduled, applied, cancelled and failed |
+| Certificates | certificate changes of connections scheduled, applied, cancelled and failed |
 | Hooks and webhooks | every hook run with exit code, duration and output, and every webhook call |
 
 Records older than *Hide transfer log records after (days)* (setting, default 90) are shown only when *Complete
@@ -427,10 +449,23 @@ the OpenAPI description itself is at `/openapi/v1.json`. Both require a signed i
 | `GET /api/v1/inbox/{id}` / `…/content` | detail / payload of a received message |
 | `POST /api/v1/inbox/{id}/fetched` | marks a received message as fetched |
 | `GET /api/v1/partners`, `/identities` | names usable when sending |
-| `GET`, `POST /api/v1/partners/{partner}/certificate-changes` | certificate changes of a partner; uploads a certificate with the time it is used from |
+| `GET /api/v1/connections` | the connections with their settings, certificates and the AS2 names of their partners |
+| `GET`, `POST /api/v1/connections/{connection}/certificate-changes` | certificate changes of a connection; uploads a certificate with the time it is used from |
+| `GET`, `POST /api/v1/partners/{partner}/certificate-changes` | the same for the connection of a partner |
 | `DELETE /api/v1/certificate-changes/{id}` | cancels a scheduled certificate change |
 | `GET /api/v1/events` | reads the transfer log |
 | `GET /api/v1/status` | state of the send service and the queues |
+
+A token created with *May change the configuration* can also set up connections, partners, identities and
+certificates, e.g. to import them from another AS2 server. The `PUT` endpoints create the record with the key in
+the path or update it, so an import can run again; a property left out (or `null`) keeps its value.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET`, `POST /api/v1/certificates` | lists the stored certificates; stores one (JSON: `fileName`, `data` in base64, `password` of a PKCS#12, optional `name`), or returns the one with the same thumbprint stored already |
+| `PUT /api/v1/connections/{name}` | creates or updates a connection (JSON: `url`, `signMessages`, `signatureAlgorithm`, `encryptMessages`, `encryptionAlgorithm`, `compressMessages`, `compressBeforeSigning`, `mdnMode` (`None`, `Sync`, `Async`), `requestSignedMdn`, `mdnTimeoutMinutes`, `requireSignedMessages`, `requireEncryptedMessages`, `signatureCertificateId`, `encryptionCertificateId`, `tlsCertificateId`, `httpUserName`, `httpPassword`, `timeoutSeconds`, `contactName`, `contactEmail`) |
+| `PUT /api/v1/partners/{as2Id}` | creates or updates a partner (JSON: `name`, `description`, `connection` (its name), `enabled`, `defaultIdentity` (an AS2 name, `""` removes it), `contentType`, `subject`) |
+| `PUT /api/v1/identities/{as2Id}` | creates or updates our identity (JSON: `name`, `description`, `email`, `signingCertificateId`, `decryptionCertificateId`) |
 
 Partners and identities are given by their name or AS2 name.
 
@@ -453,7 +488,9 @@ time) and `message.failed` (sending failed for good). A token can carry an *inbo
 
 The request is a `POST` with a JSON body (`event`, `timestamp`, `outgoingMessageId` or `receivedMessageId`,
 `messageId`, `reference`, `fileName`, `contentType`, `size`, `partnerName`, `partnerAs2Id`, `identityAs2Id`,
-`status`, `disposition`, `mic`, `error`, `sentDate`, `deliveredDate`; only those with a value) and the header
+`status`, `disposition`, `mic`, `error`, `sentDate`, `deliveredDate`; only those with a value; for
+`certificate.applied` `partnerName` is the name of the connection and `partnerAs2Id` the AS2 names of its partners,
+separated by commas) and the header
 `X-AS24Net-Event`. When a secret is set, the header `X-AS24Net-Signature` contains `sha256=<hex>`, the HMAC-SHA256
 of the body; verify it before trusting the call. A call that fails is retried (`Webhooks:RetryDelaysSeconds`) and the
 result is in *Logs → Hooks and webhooks*. URLs in private or loopback networks are refused unless
@@ -472,7 +509,7 @@ UI, so that they cannot be changed from there), e.g. with environment variables:
 | `Hooks:OnSendFailed` | sending a message failed (`AS2_WILL_RETRY` tells whether it will be retried) |
 | `Hooks:OnMdnReceived` | the partner confirmed a message with a positive MDN (or accepted it when no MDN was requested) |
 | `Hooks:OnNotDelivered` | the partner returned a negative MDN, or the MDN was invalid or did not come in time |
-| `Hooks:OnCertificateApplied` | a scheduled certificate of a partner was put in place |
+| `Hooks:OnCertificateApplied` | a scheduled certificate of a connection was put in place |
 | `Hooks:TimeoutSeconds` | a script running longer is killed (default 60) |
 
 Parameters are passed as environment variables and, with the same names in camel case, as a JSON object on
@@ -489,6 +526,7 @@ standard input:
 | `AS2_MIC` | messages | the MIC |
 | `AS2_ERROR`, `AS2_WILL_RETRY` | failures | error message, whether it is retried |
 | `AS2_CERTIFICATE_NAME`, `AS2_CERTIFICATE_THUMBPRINT`, `AS2_USAGE`, `AS2_ACTIVATE_AT` | certificate applied | the new certificate and what it is used for |
+| `AS2_CONNECTION_NAME` | certificate applied | the connection; `AS2_PARTNER_NAME` is its name too and `AS2_PARTNER_AS2_ID` the AS2 names of its partners, separated by commas |
 | `AS2_RUN_AGAIN_OF` | run again manually | id of the log record of the failed run |
 
 Hooks run in the background one after another; a slow or failing script never affects a transfer. Their output and
@@ -508,9 +546,11 @@ docker run ... -v ./hooks:/scripts:ro -e Hooks__OnReceived=/scripts/on_received.
    and import the partner's certificate (`.cer`, `.crt`, `.pem`).
 3. *Identities*: create our station with its AS2 name and select our certificate for signing and decryption.
 4. Give the partner our AS2 name, the public URL and our certificate (*Certificates*, the download icon).
-5. *Partners*: create the partner with its AS2 name and URL, select its certificates, and set the security and the
-   MDN as agreed with it.
-6. *Messages → Outgoing*: send a first message and watch it turn `Delivered` with the MDN.
+5. *Connections*: create the connection with the partner's URL, select its certificates, and set the security and
+   the MDN as agreed with it.
+6. *Partners*: create the partner with its AS2 name and select the connection. Another AS2 name of the same partner
+   behind the same server is another partner with the same connection.
+7. *Messages → Outgoing*: send a first message and watch it turn `Delivered` with the MDN.
 
 ## Tests
 

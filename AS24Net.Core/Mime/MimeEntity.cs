@@ -104,8 +104,9 @@ public sealed class MimeEntity
                     headers.Add(new MimeHeader(name, value.ToString().Trim()));
 
                 var colon = line.IndexOf(':');
+                // The line is read as Latin-1 to keep every byte; the message shows it as the UTF-8 it usually is.
                 if (colon <= 0)
-                    throw new MimeFormatException($"Invalid header line '{Shorten(line)}'.");
+                    throw new MimeFormatException($"Invalid header line '{Shorten(Encoding.UTF8.GetString(data, position, lineEnd - position))}'.");
 
                 name = line[..colon].Trim();
                 value.Clear().Append(line[(colon + 1)..]);

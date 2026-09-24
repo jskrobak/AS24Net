@@ -204,6 +204,7 @@ public class As2Sender(
             SignatureAlgorithm = partner.Connection.SignatureAlgorithm,
             EncryptionCertificate = encryption,
             EncryptionAlgorithm = partner.Connection.EncryptionAlgorithm,
+            UnsignedWithoutMime = partner.Connection.UnsignedWithoutMime,
             Mdn = mdn,
             Host = HostOf(settings.PublicUrl),
         };

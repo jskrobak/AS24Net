@@ -19,6 +19,14 @@ public class MimeEntityTests
     }
 
     [Fact]
+    public void Parse_ShowsAnInvalidHeaderLineAsUtf8()
+    {
+        var error = Assert.Throws<MimeFormatException>(() => MimeEntity.Parse(Encoding.UTF8.GetBytes("FTX+AAA+++Řádek 1'\r\n")));
+
+        Assert.Contains("Řádek 1", error.Message);
+    }
+
+    [Fact]
     public void Parse_AcceptsBareLineFeeds()
     {
         var entity = MimeEntity.Parse(Encoding.ASCII.GetBytes("Content-Type: application/xml\n\n<a/>"));

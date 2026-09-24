@@ -8,3 +8,5 @@
 data/
 AS24Net.Core.Tests/
 AS24Net.Services.Tests/
+# The interoperability tests and their data (interop/work) are not part of the image.
+interop/

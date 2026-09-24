@@ -37,6 +37,12 @@ public sealed class As2OutboundOptions
 
     public string EncryptionAlgorithm { get; init; } = As2Algorithms.Aes256;
 
+    /// <summary>
+    /// An encrypted message that is neither signed nor compressed carries the payload itself in the envelope, without
+    /// the MIME entity around it, as Mendelson AS2 expects; otherwise the MIME entity, as S/MIME describes it.
+    /// </summary>
+    public bool UnsignedWithoutMime { get; init; }
+
     /// <summary>Asks for an MDN; <c>null</c> sends the message without asking for one.</summary>
     public MdnRequest? Mdn { get; init; }
 
@@ -122,7 +128,12 @@ public static class As2MessageBuilder
         var encrypted = options.EncryptionCertificate is not null;
         if (encrypted)
         {
-            var enveloped = Smime.Encrypt(entity.ToBytes(), options.EncryptionCertificate!, options.EncryptionAlgorithm);
+            // The payload alone for a partner that wants it so; the MIC is then computed over what is encrypted.
+            var withoutMime = options.UnsignedWithoutMime && !signed && !compressed;
+            if (withoutMime)
+                micContent = options.Payload;
+            var enveloped = Smime.Encrypt(withoutMime ? options.Payload : entity.ToBytes(), options.EncryptionCertificate!,
+                options.EncryptionAlgorithm);
             entity = MimeEntity.Create("application/pkcs7-mime; smime-type=enveloped-data; name=smime.p7m", enveloped,
                 ("Content-Transfer-Encoding", "binary"),
                 ("Content-Disposition", "attachment; filename=smime.p7m"));

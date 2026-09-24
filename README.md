@@ -66,8 +66,10 @@ Not implemented, because the deployments this server is built for do not use it:
 - RSA-PSS signatures and RSA-OAEP key transport
 - Asynchronous MDNs by e-mail (SMTP)
 
-Interoperability was tested against [pyas2lib](https://github.com/abhishek-ram/pyas2lib) in both directions: signed,
-encrypted and compressed messages with every supported algorithm, synchronous and asynchronous signed MDNs.
+Interoperability is tested against [pyas2lib](https://github.com/abhishek-ram/pyas2lib),
+[OpenAS2](https://github.com/OpenAS2/OpenAs2App) and [Mendelson AS2](https://mendelson-e-c.com/as2) in both
+directions: signed, encrypted and compressed messages with every supported algorithm, synchronous and asynchronous,
+signed and unsigned MDNs (see *Tests*).
 
 ## Solution structure
 
@@ -82,6 +84,7 @@ encrypted and compressed messages with every supported algorithm, synchronous an
 | `AS24Net.Services.Tests` | Tests of the services |
 | `AS24Net.DependencyInjection` | Data layer registration |
 | `AS24Net.Server` | Blazor Server UI, AS2 endpoint, REST API and host |
+| `interop/AS24Net.Interop` | Interoperability and load tests against other AS2 servers in Docker |
 
 ## Configuration
 
@@ -143,6 +146,7 @@ its settings are kept, and its certificate is changed, in one place:
 | *Sign*, *Signature digest* | our messages are signed with the identity's signing certificate |
 | *Encrypt*, *Encryption* | our messages are encrypted for the partner's encryption certificate |
 | *Compress*, *Compress before signing* | zlib compression of the payload (recommended) or of the signed message |
+| *Without MIME when not signed* | an encrypted message that is neither signed nor compressed carries the payload itself in the envelope, as Mendelson AS2 sends and expects it; such messages are read either way |
 | *MDN* | none, synchronous or asynchronous; *Request a signed MDN*; an asynchronous MDN that does not come within *minutes* makes the message go again |
 | *Must be signed*, *Must be encrypted* | messages of the partner that are not are refused with `insufficient-message-security` |
 | *Signature*, *Encryption*, *HTTPS server* certificates | the partner's certificates; the one it signed with before the last change is still accepted |
@@ -681,6 +685,16 @@ is true when it got through and the configuration has no problem.
 ```bash
 dotnet test
 ```
+
+Interoperability with pyas2lib, OpenAS2 and Mendelson AS2 (every combination of signing, encryption, compression
+and MDN in both directions) and a load test run in Docker, by hand:
+
+```bash
+dotnet run --project interop/AS24Net.Interop -- interop
+dotnet run --project interop/AS24Net.Interop -- load inbound --messages 2000 --concurrency 32
+```
+
+See [interop/README.md](interop/README.md).
 
 ## License
 

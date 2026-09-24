@@ -195,6 +195,7 @@ public class ConnectionRequest
     public string? EncryptionAlgorithm { get; init; }
     public bool? CompressMessages { get; init; }
     public bool? CompressBeforeSigning { get; init; }
+    public bool? UnsignedWithoutMime { get; init; }
     public string? MdnMode { get; init; }
     public bool? RequestSignedMdn { get; init; }
     public int? MdnTimeoutMinutes { get; init; }
@@ -219,6 +220,7 @@ public class ConnectionRequest
         c.EncryptionAlgorithm = EncryptionAlgorithm?.Trim().ToLowerInvariant() ?? c.EncryptionAlgorithm;
         c.CompressMessages = CompressMessages ?? c.CompressMessages;
         c.CompressBeforeSigning = CompressBeforeSigning ?? c.CompressBeforeSigning;
+        c.UnsignedWithoutMime = UnsignedWithoutMime ?? c.UnsignedWithoutMime;
         c.MdnMode = MdnMode is null ? c.MdnMode : Enum.Parse<MdnMode>(MdnMode, ignoreCase: true);
         c.RequestSignedMdn = RequestSignedMdn ?? c.RequestSignedMdn;
         c.MdnTimeoutMinutes = MdnTimeoutMinutes ?? c.MdnTimeoutMinutes;
@@ -240,13 +242,13 @@ public record PartnerRequest(string? Name, string? Description, string? Connecti
 public record IdentityRequest(string? Name, string? Description, string? Email, int? SigningCertificateId, int? DecryptionCertificateId);
 
 public record ConnectionDto(int Id, string Name, string? Description, string Url, bool SignMessages, string SignatureAlgorithm,
-    bool EncryptMessages, string EncryptionAlgorithm, bool CompressMessages, bool CompressBeforeSigning, string MdnMode,
+    bool EncryptMessages, string EncryptionAlgorithm, bool CompressMessages, bool CompressBeforeSigning, bool UnsignedWithoutMime, string MdnMode,
     bool RequestSignedMdn, int MdnTimeoutMinutes, bool RequireSignedMessages, bool RequireEncryptedMessages,
     int? SignatureCertificateId, int? PreviousSignatureCertificateId, int? EncryptionCertificateId, int? TlsCertificateId,
     string? HttpUserName, int TimeoutSeconds, IReadOnlyList<PartnerContact> Contacts, IReadOnlyList<string> PartnerAs2Ids)
 {
     public static ConnectionDto From(Connection c) => new(c.Id, c.Name, c.Description, c.Url, c.SignMessages, c.SignatureAlgorithm,
-        c.EncryptMessages, c.EncryptionAlgorithm, c.CompressMessages, c.CompressBeforeSigning, c.MdnMode.ToString(), c.RequestSignedMdn,
+        c.EncryptMessages, c.EncryptionAlgorithm, c.CompressMessages, c.CompressBeforeSigning, c.UnsignedWithoutMime, c.MdnMode.ToString(), c.RequestSignedMdn,
         c.MdnTimeoutMinutes, c.RequireSignedMessages, c.RequireEncryptedMessages, c.SignatureCertificateId,
         c.PreviousSignatureCertificateId, c.EncryptionCertificateId, c.TlsCertificateId, c.HttpUserName, c.TimeoutSeconds,
         c.Contacts, c.Partners.Select(p => p.As2Id).Order(StringComparer.Ordinal).ToList());

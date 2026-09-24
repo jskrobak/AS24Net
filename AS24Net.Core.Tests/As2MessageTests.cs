@@ -52,6 +52,44 @@ public class As2MessageTests
     }
 
     [Fact]
+    public void UnsignedWithoutMime_EnvelopesThePayloadItself_AndIsReadBack()
+    {
+        var message = As2MessageBuilder.Build(new As2OutboundOptions
+        {
+            From = "ALICE", To = "BOB", Payload = Payload, ContentType = "application/edifact", FileName = "orders.edi",
+            EncryptionCertificate = Public(Bob), UnsignedWithoutMime = true,
+        });
+
+        // What Mendelson AS2 sends and expects: no MIME headers inside the envelope.
+        Assert.Equal(Payload, Smime.Decrypt(message.Body, [Bob]).Content);
+
+        var received = As2MessageReader.Read(message.Headers, message.Body, [Bob], [Public(Alice)]);
+        Assert.Equal(Payload, received.Payload);
+        Assert.Equal("application/octet-stream", received.ContentType);
+        Assert.True(received.Encrypted);
+        Assert.False(received.Signed);
+        Assert.Equal(message.Mic, received.Mic);
+        Assert.Equal(Mic.Compute(Payload, As2Algorithms.Sha256), received.Mic);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void UnsignedWithoutMime_DoesNotChangeASignedOrCompressedMessage(bool sign, bool compress)
+    {
+        var message = As2MessageBuilder.Build(new As2OutboundOptions
+        {
+            From = "ALICE", To = "BOB", Payload = Payload, ContentType = "application/edifact",
+            SigningCertificate = sign ? Alice : null, Compress = compress,
+            EncryptionCertificate = Public(Bob), UnsignedWithoutMime = true,
+        });
+
+        var received = As2MessageReader.Read(message.Headers, message.Body, [Bob], [Public(Alice)]);
+        Assert.Equal(Payload, received.Payload);
+        Assert.Equal("application/edifact", received.ContentType);
+    }
+
+    [Fact]
     public void Signature_WithAnUnknownCertificate_IsRefused()
     {
         var message = As2MessageBuilder.Build(new As2OutboundOptions

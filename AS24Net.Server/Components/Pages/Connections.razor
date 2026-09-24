@@ -47,6 +47,11 @@
                         <HxSelect TItem="string" TValue="string" Label="Encryption" Data="As2Algorithms.EncryptionAlgorithms"
                                   @bind-Value="@currentConnection.EncryptionAlgorithm" Nullable="false" Enabled="@currentConnection.EncryptMessages" />
                     </div>
+                    <div class="col-md-6">
+                        <HxCheckbox Text="Without MIME when not signed" @bind-Value="@currentConnection.UnsignedWithoutMime"
+                                    Enabled="@(currentConnection.EncryptMessages && !currentConnection.SignMessages && !currentConnection.CompressMessages)"
+                                    Hint="The payload itself in the envelope of an unsigned, uncompressed message, as Mendelson AS2 wants it." />
+                    </div>
                     <div class="col-md-3"><HxCheckbox Text="Compress (RFC 5402)" @bind-Value="@currentConnection.CompressMessages" /></div>
                     <div class="col-md-9"><HxCheckbox Text="Compress before signing (recommended), otherwise the signed message" @bind-Value="@currentConnection.CompressBeforeSigning" Enabled="@currentConnection.CompressMessages" /></div>
                     <div class="col-md-4">

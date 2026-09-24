@@ -42,6 +42,12 @@ public class Connection
     /// <summary>Compress the payload before signing it (RFC 5402 recommends it); otherwise the signed message.</summary>
     public bool CompressBeforeSigning { get; set; } = true;
 
+    /// <summary>
+    /// A message that is encrypted but neither signed nor compressed carries the payload itself in the envelope,
+    /// without the MIME entity S/MIME puts around it: what Mendelson AS2 sends and expects.
+    /// </summary>
+    public bool UnsignedWithoutMime { get; set; }
+
     public MdnMode MdnMode { get; set; } = MdnMode.Sync;
 
     /// <summary>Ask for a signed MDN; its MIC is compared with ours.</summary>

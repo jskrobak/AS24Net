@@ -1,0 +1,81 @@
+# Interoperability and load tests of AS24Net: the server built from this repository with its database, and other
+# AS2 implementations as its partners. Started and driven by the test runner (interop/AS24Net.Interop), see
+# interop/README.md. Everything the stations need is created in interop/work, which is thrown away with the project.
+name: as24net-interop
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: as24net
+      POSTGRES_PASSWORD: as24net
+      POSTGRES_DB: as24net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U as24net -d as24net"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  as24net:
+    build:
+      context: ..
+      dockerfile: AS24Net.Server/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__AS24Net: Host=postgres;Database=as24net;Username=as24net;Password=as24net
+      Certificates__GenerateCertificate: "false"
+    ports:
+      - "18080:8080"
+    # The receiver of the outbound load test runs on the host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health/ready HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q ' 200 '"]
+      interval: 3s
+      timeout: 5s
+      retries: 60
+
+  pyas2:
+    build: pyas2
+    environment:
+      AS24NET_URL: http://as24net:8080/as2
+      MDN_URL: http://pyas2:8000/as2
+    volumes:
+      - ./work/certs:/certs:ro
+    ports:
+      - "18000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  openas2:
+    build: openas2
+    volumes:
+      - ./work/certs:/certs:ro
+      - ./work/openas2/partnerships:/partnerships:ro
+      - ./work/openas2/data:/data
+    ports:
+      - "18010:10080"
+    healthcheck:
+      # Only whether the receiver listens (10080 = 0x2760): a connection without a request makes OpenAS2 log an error.
+      test: ["CMD", "bash", "-c", "grep -q ':2760 .* 0A ' /proc/net/tcp /proc/net/tcp6"]
+      interval: 3s
+      timeout: 5s
+      retries: 60
+
+  mendelson:
+    build: mendelson
+    volumes:
+      - ./work/certs:/certs:ro
+      - ./work/mendelson/config:/config:ro
+    ports:
+      - "18081:8081"
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://127.0.0.1:8081/health"]
+      interval: 3s
+      timeout: 5s
+      retries: 100

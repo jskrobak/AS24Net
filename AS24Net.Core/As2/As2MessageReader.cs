@@ -53,6 +53,7 @@ public static class As2MessageReader
         // The entity described by the HTTP headers.
         var entity = MimeEntity.FromHeaders(
             headers.Where(h => h.Key.StartsWith("Content-", StringComparison.OrdinalIgnoreCase)), body);
+        var outerFileName = entity.FileName;
 
         bool signed = false, encrypted = false, compressed = false;
         X509Certificate2? signer = null;
@@ -85,13 +86,33 @@ public static class As2MessageReader
                         throw new As2ProcessingException(As2Errors.UnexpectedProcessingError, $"S/MIME type '{smimeType}' is not supported.");
 
                     var (data, algorithm) = Smime.Decrypt(Der(entity), decryptionCertificates);
-                    entity = MimeEntity.Parse(data);
                     encrypted = true;
                     encryptionAlgorithm = algorithm;
                     // Unless a signature follows, the MIC is computed over the decrypted MIME entity.
                     if (!signed)
                         mic = Mic.Compute(data, mdnRequest?.MicAlgorithm(micAlgorithm) ?? micAlgorithm);
-                    continue;
+
+                    if (TryParseEntity(data) is { } inner)
+                    {
+                        entity = inner;
+                        continue;
+                    }
+
+                    // Not a MIME entity: the payload itself. Mendelson AS2 encrypts an unsigned, uncompressed message
+                    // that way, without the MIME entity S/MIME puts into the envelope; its name and type are unknown.
+                    return new As2InboundMessage
+                    {
+                        Payload = data,
+                        ContentType = "application/octet-stream",
+                        FileName = outerFileName is { } name && !name.EndsWith(".p7m", StringComparison.OrdinalIgnoreCase) ? name : null,
+                        Signed = signed,
+                        Encrypted = true,
+                        Compressed = compressed,
+                        SignatureCertificate = signer,
+                        SignatureAlgorithm = signatureAlgorithm,
+                        EncryptionAlgorithm = encryptionAlgorithm,
+                        Mic = mic!,
+                    };
                 }
 
                 if (contentType.Is("multipart/signed"))
@@ -139,6 +160,24 @@ public static class As2MessageReader
         catch (MimeFormatException ex)
         {
             throw new As2ProcessingException(As2Errors.UnexpectedProcessingError, "The message is not valid MIME: " + ex.Message, ex);
+        }
+    }
+
+    /// <summary>
+    /// The decrypted content as a MIME entity; <c>null</c> when it is none. Every entity S/MIME encrypts has a
+    /// Content-Type, while a bare payload fails to parse or has none (EDIFACT may start with a line such as
+    /// <c>UNA:+.? '</c>, which alone looks like a header).
+    /// </summary>
+    private static MimeEntity? TryParseEntity(byte[] data)
+    {
+        try
+        {
+            var entity = MimeEntity.Parse(data);
+            return entity["Content-Type"] is null ? null : entity;
+        }
+        catch (MimeFormatException)
+        {
+            return null;
         }
     }
 

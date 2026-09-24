@@ -40,10 +40,16 @@ public class CertificateChangeRepository(
 
     public Task<List<CertificateChange>> GetDueAsync(DateTime now, CancellationToken cancellationToken = default) => Data
         .Where(c => c.Status == CertificateChangeStatus.Scheduled && c.ActivateAt <= now)
-        .Include(c => c.Partner)
+        .Include(c => c.Connection).ThenInclude(c => c!.Partners)
         .Include(c => c.Certificate)
         .OrderBy(c => c.ActivateAt)
         .ThenBy(c => c.Id)
+        .ToListAsync(cancellationToken);
+
+    public Task<List<CertificateChange>> GetByConnectionAsync(int connectionId, CancellationToken cancellationToken = default) => Data
+        .Where(c => c.ConnectionId == connectionId)
+        .Include(c => c.Certificate)
+        .OrderByDescending(c => c.ActivateAt)
         .ToListAsync(cancellationToken);
 
     public Task<DateTime?> GetNextScheduledAsync(CancellationToken cancellationToken = default) => Data
@@ -52,7 +58,7 @@ public class CertificateChangeRepository(
 
     public Task<List<CertificateChange>> GetScheduledAsync(CancellationToken cancellationToken = default) => Data
         .Where(c => c.Status == CertificateChangeStatus.Scheduled)
-        .Include(c => c.Partner)
+        .Include(c => c.Connection)
         .Include(c => c.Certificate)
         .OrderBy(c => c.ActivateAt)
         .ToListAsync(cancellationToken);

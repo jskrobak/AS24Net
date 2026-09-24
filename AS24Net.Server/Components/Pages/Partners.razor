@@ -1,6 +1,5 @@
 @page "/Partners"
 @rendermode InteractiveServer
-@using AS24Net.Core.Security
 @using AS24Net.DataLayer.Filters
 @using AS24Net.Domain
 <style>
@@ -19,11 +18,18 @@
             <EditForm Model="@currentPartner" OnValidSubmit="SavePartner">
                 <DataAnnotationsValidator />
 
-                <h6 class="text-body-secondary">Partner</h6>
                 <div class="row g-2">
                     <div class="col-md-6"><HxInputText Label="Name" @bind-Value="@currentPartner.Name" /></div>
                     <div class="col-md-6"><HxInputText Label="AS2 name" Hint="AS2-To of our messages, AS2-From of the partner's." @bind-Value="@currentPartner.As2Id" InputCssClass="a24-code" /></div>
-                    <div class="col-md-12"><HxInputText Label="URL" Hint="The partner's AS2 endpoint messages are posted to." @bind-Value="@currentPartner.Url" InputCssClass="a24-code" /></div>
+                    <div class="col-md-12">
+                        <HxSelect TItem="Connection" TValue="int" Label="Connection"
+                                  Hint="The partner's server: URL, security, MDN and certificates, shared by the partners that differ only in the AS2 name."
+                                  Data="connections" @bind-Value="@currentPartner.ConnectionId"
+                                  TextSelector="@(c => $"{c.Name} ({c.Url})")" ValueSelector="@(c => c.Id)" Nullable="false" />
+                        <div class="small text-body-secondary">
+                            <a href="Connections">A new connection</a> is set up in Connections.
+                        </div>
+                    </div>
                     <div class="col-md-12"><HxInputText Label="Description" @bind-Value="@currentPartner.Description" /></div>
                     <div class="col-md-6">
                         <HxSelect TItem="Identity" TValue="int?" Label="Default identity" Hint="We send from it when the message names no identity."
@@ -33,74 +39,6 @@
                     <div class="col-md-6"><HxInputText Label="Content type" Hint="Media type of the payload when the message names none, e.g. application/edifact." @bind-Value="@currentPartner.ContentType" /></div>
                     <div class="col-md-6"><HxInputText Label="Subject" Hint="Subject of our messages; the file name when empty." @bind-Value="@currentPartner.Subject" /></div>
                     <div class="col-md-6"><HxCheckbox Label="Enabled" Text="Messages are sent to the partner and accepted from it" @bind-Value="@currentPartner.Enabled" /></div>
-                    <div class="col-md-6"><HxInputText Label="Contact" @bind-Value="@currentPartner.ContactName" /></div>
-                    <div class="col-md-6"><HxInputText Label="Contact e-mail" @bind-Value="@currentPartner.ContactEmail" /></div>
-                </div>
-
-                <h6 class="text-body-secondary mt-4">Messages we send</h6>
-                <div class="row g-2">
-                    <div class="col-md-3"><HxCheckbox Text="Sign" @bind-Value="@currentPartner.SignMessages" /></div>
-                    <div class="col-md-3">
-                        <HxSelect TItem="string" TValue="string" Label="Signature digest" Data="As2Algorithms.DigestAlgorithms"
-                                  @bind-Value="@currentPartner.SignatureAlgorithm" Nullable="false" Enabled="@currentPartner.SignMessages" />
-                    </div>
-                    <div class="col-md-3"><HxCheckbox Text="Encrypt" @bind-Value="@currentPartner.EncryptMessages" /></div>
-                    <div class="col-md-3">
-                        <HxSelect TItem="string" TValue="string" Label="Encryption" Data="As2Algorithms.EncryptionAlgorithms"
-                                  @bind-Value="@currentPartner.EncryptionAlgorithm" Nullable="false" Enabled="@currentPartner.EncryptMessages" />
-                    </div>
-                    <div class="col-md-3"><HxCheckbox Text="Compress (RFC 5402)" @bind-Value="@currentPartner.CompressMessages" /></div>
-                    <div class="col-md-9"><HxCheckbox Text="Compress before signing (recommended), otherwise the signed message" @bind-Value="@currentPartner.CompressBeforeSigning" Enabled="@currentPartner.CompressMessages" /></div>
-                    <div class="col-md-4">
-                        <HxSelect TItem="MdnMode" TValue="MdnMode" Label="MDN" Data="mdnModes" @bind-Value="@currentPartner.MdnMode" Nullable="false"
-                                  TextSelector="@(m => m switch { MdnMode.Sync => "Synchronous (in the HTTP response)", MdnMode.Async => "Asynchronous (posted to our URL)", _ => "None" })" />
-                    </div>
-                    <div class="col-md-4"><HxCheckbox Label="&nbsp;" Text="Request a signed MDN" @bind-Value="@currentPartner.RequestSignedMdn" Enabled="@(currentPartner.MdnMode != MdnMode.None)" /></div>
-                    <div class="col-md-4"><HxInputNumber Label="Asynchronous MDN within (minutes)" Hint="Otherwise the message is sent again." Decimals="0" @bind-Value="@currentPartner.MdnTimeoutMinutes" Enabled="@(currentPartner.MdnMode == MdnMode.Async)" /></div>
-                </div>
-
-                <h6 class="text-body-secondary mt-4">Messages we receive</h6>
-                <div class="row g-2">
-                    <div class="col-md-6"><HxCheckbox Text="Must be signed" @bind-Value="@currentPartner.RequireSignedMessages" /></div>
-                    <div class="col-md-6"><HxCheckbox Text="Must be encrypted" @bind-Value="@currentPartner.RequireEncryptedMessages" /></div>
-                </div>
-
-                <h6 class="text-body-secondary mt-4">Certificates of the partner</h6>
-                <div class="small text-body-secondary mb-2">
-                    Import them in <a href="Certificates">Certificates</a>, or upload a new one in advance with the time it is to be used from in
-                    <a href="@($"CertificateChanges?partner={currentPartner.Id}")">Certificate changes</a>.
-                </div>
-                <div class="row g-2">
-                    <div class="col-md-6">
-                        <HxSelect TItem="Certificate" TValue="int?" Label="Signature" Hint="Verifies the partner's messages and MDNs."
-                                  Data="certificates" @bind-Value="@currentPartner.SignatureCertificateId"
-                                  TextSelector="@CertificateText" ValueSelector="@(c => (int?)c.Id)" Nullable="true" NullText="-none-" />
-                        @if (currentPartner.PreviousSignatureCertificateId is { } previous)
-                        {
-                            <div class="small text-body-secondary">
-                                The previous one is accepted too: @(certificates.FirstOrDefault(c => c.Id == previous)?.Name)
-                                <HxButton Size="ButtonSize.Small" Color="ThemeColor.Link" Text="Stop accepting it"
-                                          OnClick="() => currentPartner.PreviousSignatureCertificateId = null" />
-                            </div>
-                        }
-                    </div>
-                    <div class="col-md-6">
-                        <HxSelect TItem="Certificate" TValue="int?" Label="Encryption" Hint="Our messages are encrypted for it."
-                                  Data="certificates" @bind-Value="@currentPartner.EncryptionCertificateId"
-                                  TextSelector="@CertificateText" ValueSelector="@(c => (int?)c.Id)" Nullable="true" NullText="-none-" />
-                    </div>
-                    <div class="col-md-6">
-                        <HxSelect TItem="Certificate" TValue="int?" Label="HTTPS server" Hint="Trusted for the partner's HTTPS (its own or its CA); empty: the system trust store."
-                                  Data="certificates" @bind-Value="@currentPartner.TlsCertificateId"
-                                  TextSelector="@CertificateText" ValueSelector="@(c => (int?)c.Id)" Nullable="true" NullText="-system trust store-" />
-                    </div>
-                </div>
-
-                <h6 class="text-body-secondary mt-4">Connection</h6>
-                <div class="row g-2">
-                    <div class="col-md-4"><HxInputText Label="HTTP user name" Hint="Basic authentication, if the partner wants it." @bind-Value="@currentPartner.HttpUserName" /></div>
-                    <div class="col-md-4"><HxInputText Label="HTTP password" Type="InputType.Password" @bind-Value="@currentPartner.HttpPassword" /></div>
-                    <div class="col-md-4"><HxInputNumber Label="Timeout (seconds)" Hint="With a synchronous MDN the time until it arrives." Decimals="0" @bind-Value="@currentPartner.TimeoutSeconds" /></div>
                 </div>
 
                 <HxSubmit Color="ThemeColor.Primary" CssClass="mt-4">Save</HxSubmit>
@@ -116,7 +54,7 @@
         <HxButton Text="New partner" Color="ThemeColor.Primary" Icon="BootstrapIcon.PlusLg" OnClick="HandleNewItemClicked" />
     </CommandsTemplate>
     <FilterTemplate Context="filterContext">
-        <HxInputText Label="Name or AS2 name" @bind-Value="filterContext.Name" />
+        <HxInputText Label="Name, AS2 name or connection" @bind-Value="filterContext.Name" />
     </FilterTemplate>
     <DataTemplate>
         <HxGrid @ref="gridComponent"
@@ -137,26 +75,18 @@
                     </ItemTemplate>
                 </HxGridColumn>
                 <HxGridColumn HeaderText="AS2 name" ItemTextSelector="@(d => d.As2Id)" SortKeySelector="d => d.As2Id" ItemCssClass="a24-code"/>
-                <HxGridColumn HeaderText="URL" ItemTextSelector="@(d => d.Url)" SortKeySelector="d => d.Url" ItemCssClass="small"/>
-                <HxGridColumn HeaderText="Security">
+                <HxGridColumn HeaderText="Connection" SortKeySelector="d => d.Connection.Name">
                     <ItemTemplate Context="p">
-                        @if (p.SignMessages) { <HxBadge Color="ThemeColor.Primary" CssClass="me-1">sign @p.SignatureAlgorithm</HxBadge> }
-                        @if (p.EncryptMessages) { <HxBadge Color="ThemeColor.Primary" CssClass="me-1">encrypt @p.EncryptionAlgorithm</HxBadge> }
-                        @if (p.CompressMessages) { <HxBadge Color="ThemeColor.Secondary" CssClass="me-1">compress</HxBadge> }
+                        <a href="Connections" title="@p.Connection.Url">@p.Connection.Name</a>
                     </ItemTemplate>
                 </HxGridColumn>
-                <HxGridColumn HeaderText="MDN" SortKeySelector="d => d.MdnMode">
-                    <ItemTemplate Context="p">
-                        @p.MdnMode@(p.MdnMode != MdnMode.None && p.RequestSignedMdn ? ", signed" : "")
-                    </ItemTemplate>
-                </HxGridColumn>
-                <HxGridColumn HeaderText="Certificate" ItemTextSelector="@(d => CertificateValidity(d.SignatureCertificateId ?? d.EncryptionCertificateId))" ItemCssClass="small"/>
+                <HxGridColumn HeaderText="Content type" ItemTextSelector="@(d => d.ContentType)" SortKeySelector="d => d.ContentType" ItemCssClass="small"/>
 
                 <HxContextMenuGridColumn Context="partner">
                     <HxContextMenu>
                         <HxContextMenuItem Text="Edit" Icon="BootstrapIcon.Pen" OnClick="async () => await HandleSelectedAsync(partner)" />
                         <HxContextMenuItem Text="Send a file" Icon="BootstrapIcon.Send" OnClick="@(() => Navigation.NavigateTo($"Outgoing?partner={partner.Id}"))" />
-                        <HxContextMenuItem Text="Schedule a certificate" Icon="BootstrapIcon.CalendarPlus" OnClick="@(() => Navigation.NavigateTo($"CertificateChanges?partner={partner.Id}"))" />
+                        <HxContextMenuItem Text="Schedule a certificate" Icon="BootstrapIcon.CalendarPlus" OnClick="@(() => Navigation.NavigateTo($"CertificateChanges?connection={partner.ConnectionId}"))" />
                         <HxContextMenuItem Text="Delete" Icon="BootstrapIcon.Trash" OnClick="async () => await HandleDeleteClick(partner)"
                                            ConfirmationQuestion="@($"Delete partner {partner.Name}? Its messages in the send queue are deleted too.")"/>
                     </HxContextMenu>

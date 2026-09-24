@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace AS24Net.Domain;
 
-/// <summary>What a certificate of a partner is used for.</summary>
+/// <summary>What a certificate of a partner (of its connection) is used for.</summary>
 public enum PartnerCertificateUsage
 {
     /// <summary>Verifying the partner's messages and MDNs; the one before is kept for the roll-over.</summary>
@@ -29,24 +29,24 @@ public enum CertificateChangeStatus
     /// <summary>Cancelled by an administrator before its time.</summary>
     Cancelled,
 
-    /// <summary>Could not be applied (e.g. the partner or the certificate was deleted), see <see cref="CertificateChange.LastError"/>.</summary>
+    /// <summary>Could not be applied (e.g. the connection or the certificate was deleted), see <see cref="CertificateChange.LastError"/>.</summary>
     Failed,
 }
 
 /// <summary>
-/// A new certificate of a partner uploaded in advance: it replaces the current one at <see cref="ActivateAt"/>,
-/// the moment the partner starts using it.
+/// A new certificate of a partner uploaded in advance: it replaces the current one of the partner's connection at
+/// <see cref="ActivateAt"/>, the moment the partner starts using it, for all the partners of the connection.
 /// </summary>
 public class CertificateChange
 {
     public int Id { get; set; }
 
-    public int? PartnerId { get; set; }
-    public Partner? Partner { get; set; }
+    public int? ConnectionId { get; set; }
+    public Connection? Connection { get; set; }
 
-    /// <summary>Name of the partner, kept for the history when the partner is deleted.</summary>
+    /// <summary>Name of the connection, kept for the history when the connection is deleted.</summary>
     [StringLength(50)]
-    public string PartnerName { get; set; } = string.Empty;
+    public string ConnectionName { get; set; } = string.Empty;
 
     public int? CertificateId { get; set; }
     public Certificate? Certificate { get; set; }

@@ -117,7 +117,7 @@ public class As2InboundService(
         try
         {
             inbound = As2MessageReader.Read(headers, body, As2Certificates.DecryptionCertificates(identity),
-                As2Certificates.SignatureCertificates(partner), partner.SignatureAlgorithm);
+                As2Certificates.SignatureCertificates(partner), partner.Connection.SignatureAlgorithm);
         }
         catch (As2ProcessingException ex)
         {
@@ -131,9 +131,9 @@ public class As2InboundService(
         record.MdnMicAlgorithm = Mic.Parse(inbound.Mic)?.Algorithm;
         record.ContentType = MdnEvaluation.Truncate(inbound.ContentType, 100);
 
-        if (partner.RequireSignedMessages && !inbound.Signed || partner.RequireEncryptedMessages && !inbound.Encrypted)
+        if (partner.Connection.RequireSignedMessages && !inbound.Signed || partner.Connection.RequireEncryptedMessages && !inbound.Encrypted)
         {
-            var missing = partner.RequireSignedMessages && !inbound.Signed ? "signed" : "encrypted";
+            var missing = partner.Connection.RequireSignedMessages && !inbound.Signed ? "signed" : "encrypted";
             return await RefuseAsync(record, partner, identity, As2Errors.InsufficientMessageSecurity,
                 $"Messages of partner {partner.Name} have to be {missing}.", mdnRequest, allowAsync: true, cancellationToken);
         }
@@ -279,7 +279,7 @@ public class As2InboundService(
             return As2Response.Text(200, "The MDN was received before.");
         }
 
-        if (partner.RequestSignedMdn && !mdn.Signed)
+        if (partner.Connection.RequestSignedMdn && !mdn.Signed)
         {
             message.Status = OutgoingStatus.NotDelivered;
             message.LastError = "A signed MDN was requested, but the MDN is not signed.";

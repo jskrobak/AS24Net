@@ -21,6 +21,12 @@ public sealed class ApiTokenAuthenticationHandler(
     /// <summary>Name of the token that authenticated the request.</summary>
     public const string TokenNameClaim = "as24net:token";
 
+    /// <summary>Present with the value <c>true</c> when the token may change the configuration.</summary>
+    public const string ConfigurationClaim = "as24net:configuration";
+
+    /// <summary>Policy of the endpoints that change the configuration.</summary>
+    public const string ConfigurationPolicy = "ApiConfiguration";
+
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         if (!Request.Headers.TryGetValue("Authorization", out var header))
@@ -37,8 +43,10 @@ public sealed class ApiTokenAuthenticationHandler(
             return AuthenticateResult.Fail("Invalid or expired token.");
         }
 
-        var identity = new ClaimsIdentity(
-            [new Claim(ClaimTypes.Name, token.Name), new Claim(TokenNameClaim, token.Name)], SchemeName);
+        List<Claim> claims = [new Claim(ClaimTypes.Name, token.Name), new Claim(TokenNameClaim, token.Name)];
+        if (token.AllowConfiguration)
+            claims.Add(new Claim(ConfigurationClaim, "true"));
+        var identity = new ClaimsIdentity(claims, SchemeName);
         return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName));
     }
 

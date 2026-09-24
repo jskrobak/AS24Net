@@ -1,0 +1,110 @@
+@page "/ConnectionTests"
+@rendermode InteractiveServer
+@using AS24Net.Domain
+@using AS24Net.Services.ConnectionTests
+
+<HxCard>
+    <HeaderTemplate>
+        <h5 class="card-title me-auto">Connection tests</h5>
+    </HeaderTemplate>
+    <BodyTemplate>
+        <p class="small text-body-secondary" style="max-width: 60rem;">
+            A test checks the configuration of the partner and of the identity (certificates, public URL), opens the TCP
+            connection, runs the TLS handshake with the partner's server certificate checked as when sending and asks for
+            the partner's URL with a <code>GET</code>, with its HTTP authentication. No message and no MDN is sent and the
+            send queue is not touched. The partners are tested one after another; every test is in the transfer log.
+        </p>
+
+        <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
+            <div style="min-width: 22rem;">
+                <HxSelect TItem="Identity" TValue="int?" Label="Test as identity"
+                          Data="identities" @bind-Value="identityId"
+                          TextSelector="@(i => $"{i.Name} ({i.As2Id})")" ValueSelector="@(i => (int?)i.Id)"
+                          Nullable="true" NullText="-the default identity of each partner-" />
+            </div>
+            <HxButton Color="ThemeColor.Primary" Icon="BootstrapIcon.PlayFill" Enabled="CanStart"
+                      OnClick="() => Start(partners)">Test all</HxButton>
+            <HxButton Color="ThemeColor.Secondary" Icon="BootstrapIcon.ArrowRepeat" Enabled="CanStart && Failed.Count > 0"
+                      OnClick="() => Start(Failed)">Test failed again (@Failed.Count)</HxButton>
+            @if (Tests.IsRunning)
+            {
+                <HxButton Color="ThemeColor.Secondary" Icon="BootstrapIcon.StopFill" OnClick="Tests.Cancel">Stop</HxButton>
+                <span class="small text-body-secondary align-self-center">
+                    <HxSpinner Size="SpinnerSize.Small" Color="ThemeColor.Secondary" /> @Tests.Progress.Done of @Tests.Progress.Total
+                </span>
+            }
+        </div>
+
+        @if (Tests.Results.Count > 0)
+        {
+            <div class="small mb-2">
+                <HxBadge Color="ThemeColor.Success">@Tests.Results.Values.Count(r => r.Success) succeeded</HxBadge>
+                <HxBadge Color="ThemeColor.Danger">@Failed.Count failed</HxBadge>
+                <HxBadge Color="ThemeColor.Secondary">@(partners.Count - partners.Count(p => Tests.Results.ContainsKey(p.Id))) not tested</HxBadge>
+            </div>
+        }
+
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead>
+                    <tr>
+                        <th>Partner</th>
+                        <th>URL</th>
+                        <th>Result</th>
+                        <th>Details</th>
+                        <th>Tested</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var partner in partners)
+                    {
+                        var result = Tests.Results.GetValueOrDefault(partner.Id);
+                        <tr>
+                            <td>
+                                <div class="fw-bold @(partner.Enabled ? "" : "text-body-secondary text-decoration-line-through")">@partner.Name</div>
+                                <div class="small text-body-secondary a24-code">@partner.As2Id</div>
+                            </td>
+                            <td class="small text-break" style="max-width: 20rem;">@partner.Url</td>
+                            <td>
+                                @if (Tests.Current == partner.Id)
+                                {
+                                    <HxSpinner Size="SpinnerSize.Small" Color="ThemeColor.Secondary" />
+                                }
+                                else if (result is not null)
+                                {
+                                    <HxBadge Color="@ResultColor(result)">@ResultText(result)</HxBadge>
+                                }
+                            </td>
+                            <td class="small" style="max-width: 36rem;">
+                                @if (result is not null)
+                                {
+                                    <ConnectionTestDetails Result="result" />
+                                    @if (!result.Success && partner.Contacts.Count > 0)
+                                    {
+                                        <div class="mt-1 text-body-secondary">Contacts:</div>
+                                        @foreach (var contact in partner.Contacts)
+                                        {
+                                            <PartnerContactView Contact="contact" />
+                                        }
+                                    }
+                                }
+                            </td>
+                            <td class="small text-nowrap">
+                                @if (result is not null)
+                                {
+                                    <div>@result.Tested.ToString("g")</div>
+                                    <div class="text-body-secondary">@result.Duration.TotalSeconds.ToString("F1") s as @result.Identity</div>
+                                }
+                            </td>
+                            <td>
+                                <HxButton Size="ButtonSize.Small" Color="ThemeColor.Secondary" Icon="BootstrapIcon.PlayFill"
+                                          Tooltip="Test this partner" Enabled="CanStart" OnClick="() => Start([partner])" />
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </BodyTemplate>
+</HxCard>

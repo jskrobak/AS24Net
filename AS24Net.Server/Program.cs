@@ -23,6 +23,7 @@ using AS24Net.Server.Logging;
 using AS24Net.Services;
 using AS24Net.Services.Api;
 using AS24Net.Services.As2;
+using AS24Net.Services.ConnectionTests;
 using AS24Net.Services.Certificates;
 using AS24Net.Services.Events;
 using AS24Net.Services.Health;
@@ -170,6 +171,7 @@ builder.AddBlazorCookies();
 
 builder.Services.AddSingleton<As2HttpClientProvider>();
 builder.Services.AddSingleton<As2EventNotifier>();
+builder.Services.AddSingleton<ConnectionTestService>();
 builder.Services.AddHttpClient(WebhookDispatcher.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddSingleton<WebhookDispatcher>();
 builder.Services.AddSingleton<IWebhookDispatcher>(sp => sp.GetRequiredService<WebhookDispatcher>());

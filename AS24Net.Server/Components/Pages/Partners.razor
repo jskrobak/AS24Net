@@ -33,8 +33,6 @@
                     <div class="col-md-6"><HxInputText Label="Content type" Hint="Media type of the payload when the message names none, e.g. application/edifact." @bind-Value="@currentPartner.ContentType" /></div>
                     <div class="col-md-6"><HxInputText Label="Subject" Hint="Subject of our messages; the file name when empty." @bind-Value="@currentPartner.Subject" /></div>
                     <div class="col-md-6"><HxCheckbox Label="Enabled" Text="Messages are sent to the partner and accepted from it" @bind-Value="@currentPartner.Enabled" /></div>
-                    <div class="col-md-6"><HxInputText Label="Contact" @bind-Value="@currentPartner.ContactName" /></div>
-                    <div class="col-md-6"><HxInputText Label="Contact e-mail" @bind-Value="@currentPartner.ContactEmail" /></div>
                 </div>
 
                 <h6 class="text-body-secondary mt-4">Messages we send</h6>
@@ -78,7 +76,7 @@
                         @if (currentPartner.PreviousSignatureCertificateId is { } previous)
                         {
                             <div class="small text-body-secondary">
-                                The previous one is accepted too: @(certificates.FirstOrDefault(c => c.Id == previous)?.Name)
+                                The previous one is accepted too: @(allCertificates.FirstOrDefault(c => c.Id == previous)?.Name)
                                 <HxButton Size="ButtonSize.Small" Color="ThemeColor.Link" Text="Stop accepting it"
                                           OnClick="() => currentPartner.PreviousSignatureCertificateId = null" />
                             </div>
@@ -103,8 +101,24 @@
                     <div class="col-md-4"><HxInputNumber Label="Timeout (seconds)" Hint="With a synchronous MDN the time until it arrives." Decimals="0" @bind-Value="@currentPartner.TimeoutSeconds" /></div>
                 </div>
 
-                <HxSubmit Color="ThemeColor.Primary" CssClass="mt-4">Save</HxSubmit>
+                <h6 class="text-body-secondary mt-4">Contacts</h6>
+                <div class="form-text mb-2">People to call when the connection does not work. E-mails and phones separated by commas.</div>
+                <PartnerContactsEditor Contacts="currentPartner.Contacts" />
+
+                <HxSubmit Color="ThemeColor.Primary" CssClass="mt-4 d-block">Save</HxSubmit>
             </EditForm>
+        }
+    </BodyTemplate>
+</HxModal>
+
+<HxModal @ref="connectionTestModal" ShowCloseButton="true" Size="ModalSize.Large">
+    <HeaderTemplate>
+        Test the connection to @connectionTestPartner?.Name
+    </HeaderTemplate>
+    <BodyTemplate>
+        @if (connectionTestPartner is not null)
+        {
+            <ConnectionTestForm Partner="connectionTestPartner" Identities="identities" />
         }
     </BodyTemplate>
 </HxModal>
@@ -114,6 +128,7 @@
               @bind-FilterModel:after="gridComponent.RefreshDataAsync">
     <CommandsTemplate>
         <HxButton Text="New partner" Color="ThemeColor.Primary" Icon="BootstrapIcon.PlusLg" OnClick="HandleNewItemClicked" />
+        <a class="btn btn-secondary" href="ConnectionTests"><HxIcon Icon="BootstrapIcon.Plug" /> Connection tests</a>
     </CommandsTemplate>
     <FilterTemplate Context="filterContext">
         <HxInputText Label="Name or AS2 name" @bind-Value="filterContext.Name" />
@@ -156,6 +171,7 @@
                     <HxContextMenu>
                         <HxContextMenuItem Text="Edit" Icon="BootstrapIcon.Pen" OnClick="async () => await HandleSelectedAsync(partner)" />
                         <HxContextMenuItem Text="Send a file" Icon="BootstrapIcon.Send" OnClick="@(() => Navigation.NavigateTo($"Outgoing?partner={partner.Id}"))" />
+                        <HxContextMenuItem Text="Test connection" Icon="BootstrapIcon.Plug" OnClick="async () => await HandleTestConnectionClick(partner)" />
                         <HxContextMenuItem Text="Schedule a certificate" Icon="BootstrapIcon.CalendarPlus" OnClick="@(() => Navigation.NavigateTo($"CertificateChanges?partner={partner.Id}"))" />
                         <HxContextMenuItem Text="Delete" Icon="BootstrapIcon.Trash" OnClick="async () => await HandleDeleteClick(partner)"
                                            ConfirmationQuestion="@($"Delete partner {partner.Name}? Its messages in the send queue are deleted too.")"/>

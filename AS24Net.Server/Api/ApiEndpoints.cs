@@ -4,6 +4,7 @@ using AS24Net.DataLayer.Filters;
 using AS24Net.DataLayer.Repositories;
 using AS24Net.Domain;
 using AS24Net.Services;
+using AS24Net.Services.ConnectionTests;
 using AS24Net.Services.Api;
 using AS24Net.Services.As2;
 using AS24Net.Services.Certificates;
@@ -264,8 +265,36 @@ public static class ApiEndpoints
         api.MapGet("/partners", async (IPartnerRepository repository, CancellationToken cancellationToken) =>
                 Results.Ok((await repository.GetAllAsync(cancellationToken))
                     .OrderBy(p => p.Name)
-                    .Select(p => new PartnerDto(p.Id, p.Name, p.As2Id, p.Url, p.Enabled, p.MdnMode.ToString())).ToList()))
-            .WithSummary("Lists partners messages can be sent to.");
+                    .Select(p => new PartnerDto(p.Id, p.Name, p.As2Id, p.Url, p.Enabled, p.MdnMode.ToString(), p.Contacts)).ToList()))
+            .WithSummary("Lists partners messages can be sent to, with their contacts.");
+
+        api.MapPost("/partners/{partner}/connection-test", async (string partner, string? identity,
+                IPartnerRepository partners, IIdentityRepository identities, ConnectionTestService tests,
+                CancellationToken cancellationToken) =>
+            {
+                var partnerEntity = (await partners.GetAllAsync(cancellationToken)).FirstOrDefault(p => Matches(p.As2Id, partner) || Matches(p.Name, partner));
+                if (partnerEntity is null)
+                    return Results.NotFound(new ApiError($"Unknown partner '{partner}'."));
+
+                int? identityId = null;
+                if (!string.IsNullOrWhiteSpace(identity))
+                {
+                    var identityEntity = (await identities.GetAllAsync(cancellationToken)).FirstOrDefault(i => Matches(i.As2Id, identity) || Matches(i.Name, identity));
+                    if (identityEntity is null)
+                        return Results.BadRequest(new ApiError($"Unknown identity '{identity}'."));
+                    identityId = identityEntity.Id;
+                }
+
+                try
+                {
+                    return Results.Ok(await tests.TestAsync(partnerEntity.Id, identityId, cancellationToken));
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Results.BadRequest(new ApiError(ex.Message));
+                }
+            })
+            .WithSummary("Tests the connection to a partner without sending anything: certificates, TCP, TLS and an HTTP GET of its URL; identity defaults to the partner's default one.");
 
         api.MapGet("/identities", async (IIdentityRepository repository, CancellationToken cancellationToken) =>
                 Results.Ok((await repository.GetAllAsync(cancellationToken))
@@ -396,7 +425,7 @@ public record ApiError(string Error);
 
 public record ApiPage<T>(IReadOnlyList<T> Items, int TotalCount);
 
-public record PartnerDto(int Id, string Name, string As2Id, string Url, bool Enabled, string MdnMode);
+public record PartnerDto(int Id, string Name, string As2Id, string Url, bool Enabled, string MdnMode, IReadOnlyList<PartnerContact> Contacts);
 
 public record IdentityDto(int Id, string Name, string As2Id);
 

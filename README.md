@@ -29,6 +29,8 @@ HTTP instead of OFTP2.
   interactive documentation (OpenAPI, Scalar)
 - Scripts run on events (hooks), webhooks per message, per API token and for the whole server
 - Persistent transfer log: outgoing, incoming, MDNs, certificate changes, hooks and webhooks
+- Connection tests that check partners (certificates, TCP, TLS, HTTP and its authentication) without sending anything
+- Contacts per partner, shown next to a failed connection test
 - Web UI: identities, partners, certificate changes, certificates, outgoing and received messages, settings, API
   tokens, users and a live log, in a light and a dark theme
 - Signing in with a password or with Microsoft Entra ID, where the list of users decides who may come in
@@ -131,6 +133,7 @@ A **partner** is a remote AS2 station:
 | *Must be signed*, *Must be encrypted* | messages of the partner that are not are refused with `insufficient-message-security` |
 | *Signature*, *Encryption*, *HTTPS server* certificates | the partner's certificates; the one it signed with before the last change is still accepted |
 | *HTTP user name / password*, *Timeout* | basic authentication and how long to wait for the answer (with a synchronous MDN, for the MDN) |
+| *Contacts* | people to call when the connection does not work, with e-mails and phones; listed by the REST API |
 
 A partner is found by the `AS2-From` of its messages and our identity by their `AS2-To`; a message for an unknown
 pair is refused with `unknown-trading-partner` (in a synchronous MDN only: an address from an unauthenticated
@@ -426,7 +429,8 @@ the OpenAPI description itself is at `/openapi/v1.json`. Both require a signed i
 | `GET /api/v1/inbox` | lists received messages; `onlyNew=true` returns messages not fetched yet |
 | `GET /api/v1/inbox/{id}` / `…/content` | detail / payload of a received message |
 | `POST /api/v1/inbox/{id}/fetched` | marks a received message as fetched |
-| `GET /api/v1/partners`, `/identities` | names usable when sending |
+| `GET /api/v1/partners`, `/identities` | names usable when sending; partners with their contacts |
+| `POST /api/v1/partners/{partner}/connection-test` | tests the connection to a partner without sending anything (`identity`, default the partner's default identity) |
 | `GET`, `POST /api/v1/partners/{partner}/certificate-changes` | certificate changes of a partner; uploads a certificate with the time it is used from |
 | `DELETE /api/v1/certificate-changes/{id}` | cancels a scheduled certificate change |
 | `GET /api/v1/events` | reads the transfer log |
@@ -501,6 +505,51 @@ configuration to them:
 docker run ... -v ./hooks:/scripts:ro -e Hooks__OnReceived=/scripts/on_received.sh ghcr.io/jskrobak/as24net:latest
 ```
 
+## Testing the connection to partners
+
+A connection test checks a partner without sending it anything, e.g. after it moved its server, changed a
+certificate or when a message does not go through. *Partners → Test connection* tests one partner as an identity of
+choice, *Partners → Connection tests* all of them one after another (or only those that failed last time).
+
+| Step | Checked | Fails when |
+|---|---|---|
+| Configuration | the certificates the messages need, the public URL for an asynchronous MDN | a certificate that is used is missing, expired, not valid yet or has no private key (the test goes on and reports it) |
+| Connection | the host name is resolved and the TCP connection opened | the name is unknown, the port closed or a firewall drops the connection |
+| TLS | the handshake, with the partner's server certificate checked as when sending (system trust store, or the certificate trusted for its HTTPS) | the certificate is not trusted, expired or not issued for the host name; the protocol, the cipher suite and the certificate are shown |
+| HTTP | a `GET` of the partner's URL with its basic authentication | `401` / `407` (credentials missing or refused), `403`, `404` (wrong path) or `5xx` |
+
+AS2 has no request that does nothing, so the test stops at the answer to the `GET`: most AS2 servers answer it
+with `405` (only `POST` is allowed) or a page of their own, which shows as much as a success does, namely that the
+address exists and lets us in. No message and no MDN is sent and the send queue is not touched. Warnings, e.g. a
+certificate that expires within 30 days, plain HTTP without encryption or a public URL on `localhost` for a partner
+elsewhere, do not make the test fail.
+
+Every test is written to *Logs → Outgoing* (`ConnectionTested`) with its details. The contacts of a partner are shown
+next to a test that failed. From a script:
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" https://as2.example.com/api/v1/partners/PARTNER-AS2/connection-test
+```
+
+```json
+{
+  "partner": "Partner",
+  "identity": "OUR-AS2",
+  "url": "https://as2.partner.example/as2",
+  "stage": "Completed",
+  "message": "The endpoint answered HTTP 405 Method Not Allowed: it accepts only POST, as an AS2 endpoint does. Nothing was sent.",
+  "problems": [],
+  "warnings": [ "The encryption certificate of the partner Partner 2026 expires on 10/15/2026." ],
+  "httpStatus": 405,
+  "tls": "Tls13, TLS_AES_256_GCM_SHA384",
+  "remoteCertificate": "CN=as2.partner.example, issued by CN=R11, O=Let's Encrypt, C=US, valid 8/1/2026 – 10/30/2026",
+  "success": true
+}
+```
+
+`stage` is where the test stopped (`Setup` for an unusable URL, `Connect`, `Tls`, `Http` or `Completed`); `success`
+is true when it got through and the configuration has no problem.
+
 ## Setting up a partner
 
 1. *Settings → General*: set the *Public URL* of the AS2 endpoint.
@@ -510,7 +559,8 @@ docker run ... -v ./hooks:/scripts:ro -e Hooks__OnReceived=/scripts/on_received.
 4. Give the partner our AS2 name, the public URL and our certificate (*Certificates*, the download icon).
 5. *Partners*: create the partner with its AS2 name and URL, select its certificates, and set the security and the
    MDN as agreed with it.
-6. *Messages → Outgoing*: send a first message and watch it turn `Delivered` with the MDN.
+6. *Partners → Test connection*: check that the partner can be reached and nothing is missing.
+7. *Messages → Outgoing*: send a first message and watch it turn `Delivered` with the MDN.
 
 ## Tests
 

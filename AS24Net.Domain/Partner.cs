@@ -120,9 +120,6 @@ public class Partner
     [Range(1, 1440)]
     public int MdnTimeoutMinutes { get; set; } = 120;
 
-    [StringLength(200)]
-    public string? ContactName { get; set; }
-
-    [StringLength(200)]
-    public string? ContactEmail { get; set; }
+    /// <summary>People to call when the connection does not work.</summary>
+    public List<PartnerContact> Contacts { get; set; } = [];
 }

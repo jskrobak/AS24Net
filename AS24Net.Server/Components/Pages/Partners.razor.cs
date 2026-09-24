@@ -20,14 +20,24 @@ public partial class Partners : ComponentBase
     private PartnerFilter filterModel = new();
     private HxGrid<Partner> gridComponent = null!;
     private HxModal partnerEditModal = null!;
+    private List<Certificate> allCertificates = [];
     private List<Certificate> certificates = [];
     private List<Identity> identities = [];
 
     protected override async Task OnInitializedAsync()
     {
-        // The partner's certificates are the ones without a private key; a CA certificate for HTTPS is one of them too.
-        certificates = (await DataService.GetAllCertificatesAsync()).Where(c => !c.HasPrivateKey).ToList();
+        allCertificates = await DataService.GetAllCertificatesAsync();
         identities = await DataService.GetAllIdentitiesAsync();
+    }
+
+    /// <summary>
+    /// The partner's certificates are the ones without a private key (a CA certificate for HTTPS is one of them too),
+    /// and those the partner uses already, e.g. a certificate shared with our identity: the selects need their items.
+    /// </summary>
+    private void PrepareCertificates(Partner partner)
+    {
+        int?[] used = [partner.SignatureCertificateId, partner.EncryptionCertificateId, partner.TlsCertificateId];
+        certificates = allCertificates.Where(c => !c.HasPrivateKey || used.Contains(c.Id)).ToList();
     }
 
     private static string CertificateText(Certificate c) => $"{c.Name} (valid to {c.ValidTo:d})";
@@ -45,6 +55,7 @@ public partial class Partners : ComponentBase
     {
         currentPartner = new Partner { DefaultIdentityId = identities.Count == 1 ? identities[0].Id : null };
         originalSignatureCertificateId = null;
+        PrepareCertificates(currentPartner);
         await partnerEditModal.ShowAsync();
     }
 
@@ -55,6 +66,7 @@ public partial class Partners : ComponentBase
 
         currentPartner = partner;
         originalSignatureCertificateId = partner.SignatureCertificateId;
+        PrepareCertificates(partner);
         await partnerEditModal.ShowAsync();
     }
 
@@ -87,4 +99,17 @@ public partial class Partners : ComponentBase
         await gridComponent.RefreshDataAsync();
         await partnerEditModal.HideAsync();
     }
+
+    #region Testing the connection to one partner
+
+    private HxModal connectionTestModal = null!;
+    private Partner? connectionTestPartner;
+
+    private async Task HandleTestConnectionClick(Partner partner)
+    {
+        connectionTestPartner = partner;
+        await connectionTestModal.ShowAsync();
+    }
+
+    #endregion
 }

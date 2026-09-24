@@ -1,0 +1,24 @@
+@using AS24Net.Services.ConnectionTests
+
+@* The outcome of one connection test: message, problems and warnings of the configuration, TLS and certificate. *@
+<div class="@(Result.Success ? "text-body-secondary" : "")">@Result.Message</div>
+@foreach (var problem in Result.Problems)
+{
+    <div class="text-danger"><HxIcon Icon="BootstrapIcon.XCircle" /> @problem</div>
+}
+@foreach (var warning in Result.Warnings)
+{
+    <div class="text-warning-emphasis"><HxIcon Icon="BootstrapIcon.ExclamationTriangle" /> @warning</div>
+}
+@if (Result.Tls is not null)
+{
+    <div class="text-body-secondary">@Result.Tls</div>
+}
+@if (!string.IsNullOrEmpty(Result.RemoteCertificate))
+{
+    <div class="text-body-secondary text-break">@Result.RemoteCertificate</div>
+}
+
+@code {
+    [Parameter, EditorRequired] public ConnectionTestResult Result { get; set; } = null!;
+}

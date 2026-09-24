@@ -50,6 +50,9 @@ public enum TransferEventType
     CertificateChangeApplied,
     CertificateChangeCancelled,
     CertificateChangeFailed,
+
+    /// <summary>A connection test: the partner's endpoint was reached, nothing was sent.</summary>
+    ConnectionTested,
 }
 
 /// <summary>

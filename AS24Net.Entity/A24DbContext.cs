@@ -1,5 +1,8 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using AS24Net.Domain;
 
@@ -56,6 +59,9 @@ public class A24DbContext(DbContextOptions options, IDataProtectionProvider? dat
             entity.HasOne(e => e.TlsCertificate).WithMany().OnDelete(DeleteBehavior.SetNull);
             // Stored as text so the table stays readable without the application.
             entity.Property(e => e.MdnMode).HasConversion<string>().HasMaxLength(10);
+            // Only read and written together with the partner. Plain JSON, not owned entities: the Havit unit of work
+            // does not support owned types.
+            JsonColumn(entity.Property(e => e.Contacts));
         });
 
         modelBuilder.Entity<Certificate>(entity =>
@@ -129,6 +135,28 @@ public class A24DbContext(DbContextOptions options, IDataProtectionProvider? dat
             // Values of the settings are JSON documents.
             entity.Property(e => e.Json).HasColumnType("jsonb");
         });
+    }
+
+    /// <summary>A list stored as a JSON document; lists are compared by their content.</summary>
+    private static void JsonColumn<T>(PropertyBuilder<List<T>> property)
+    {
+        property
+            .HasColumnType("jsonb")
+            .HasConversion(
+                value => JsonList.Serialize(value),
+                json => JsonList.Deserialize<T>(json),
+                new ValueComparer<List<T>>(
+                    (a, b) => JsonList.Serialize(a) == JsonList.Serialize(b),
+                    value => JsonList.Serialize(value).GetHashCode(),
+                    value => JsonList.Deserialize<T>(JsonList.Serialize(value))));
+    }
+
+    private static class JsonList
+    {
+        public static string Serialize<T>(List<T>? value) => JsonSerializer.Serialize(value ?? []);
+
+        public static List<T> Deserialize<T>(string? json) =>
+            string.IsNullOrEmpty(json) ? [] : JsonSerializer.Deserialize<List<T>>(json) ?? [];
     }
 
     /// <summary>Secret columns hold the encrypted value, which is much longer than the secret itself.</summary>

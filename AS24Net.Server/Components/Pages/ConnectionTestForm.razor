@@ -1,0 +1,97 @@
+@using AS24Net.Domain
+@using AS24Net.Services.ConnectionTests
+@implements IDisposable
+
+@* Tests the connection to one partner without sending anything (Partners -> Test connection). *@
+<p class="small text-body-secondary">
+    Checks the certificates and the public URL, opens the connection with TLS as when sending and asks for the
+    partner's URL with a <code>GET</code>. No message and no MDN is sent; the send queue is not touched.
+</p>
+<div class="row g-2 align-items-end">
+    <div class="col-md-8">
+        <label class="form-label">Test as identity</label>
+        <select class="form-select" value="@identityId" @onchange="e => identityId = int.Parse((string)e.Value!)">
+            @foreach (var identity in Identities)
+            {
+                <option value="@identity.Id">@identity.Name (@identity.As2Id)</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-4">
+        <HxButton Color="ThemeColor.Primary" Icon="BootstrapIcon.PlayFill" Spinner="running"
+                  Enabled="!running && !Tests.IsRunning && identityId != 0" OnClick="TestAsync">Test</HxButton>
+    </div>
+    @if (Tests.IsRunning)
+    {
+        <div class="col-12 small text-body-secondary">A series of connection tests is running, wait until it has finished.</div>
+    }
+</div>
+
+@if (Tests.Results.GetValueOrDefault(Partner.Id) is { } result)
+{
+    <hr />
+    <div class="d-flex align-items-center gap-2 mb-2">
+        <HxBadge Color="@ConnectionTests.ResultColor(result)">@ConnectionTests.ResultText(result)</HxBadge>
+        <span class="small text-body-secondary">
+            @result.Tested.ToString("g"), @result.Duration.TotalSeconds.ToString("F1") s as @result.Identity
+        </span>
+    </div>
+    <div class="small">
+        <ConnectionTestDetails Result="result" />
+    </div>
+    @if (!result.Success && Partner.Contacts.Count > 0)
+    {
+        <hr />
+        <h6>Contacts of the partner</h6>
+        <div class="small">
+            @foreach (var contact in Partner.Contacts)
+            {
+                <PartnerContactView Contact="contact" />
+            }
+        </div>
+    }
+}
+
+@code {
+    [Inject] protected ConnectionTestService Tests { get; set; } = null!;
+    [Inject] protected IHxMessengerService Messenger { get; set; } = null!;
+
+    [Parameter, EditorRequired] public Partner Partner { get; set; } = null!;
+
+    [Parameter, EditorRequired] public IReadOnlyList<Identity> Identities { get; set; } = [];
+
+    private int identityId;
+    private bool running;
+
+    protected override void OnInitialized() => Tests.Changed += HandleChanged;
+
+    protected override void OnParametersSet()
+    {
+        // The identity of the last test of the partner, otherwise its default identity, otherwise the first one.
+        var last = Tests.Results.GetValueOrDefault(Partner.Id)?.Identity;
+        identityId = Identities.FirstOrDefault(i => i.As2Id == last)?.Id
+                     ?? Identities.FirstOrDefault(i => i.Id == Partner.DefaultIdentityId)?.Id
+                     ?? Identities.FirstOrDefault()?.Id ?? 0;
+    }
+
+    private void HandleChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task TestAsync()
+    {
+        running = true;
+        try
+        {
+            await Tests.TestAsync(Partner.Id, identityId);
+        }
+        catch (Exception ex)
+        {
+            Messenger.AddError($"The connection test could not be run: {ex.Message}");
+        }
+        finally
+        {
+            running = false;
+        }
+    }
+
+    public void Dispose() => Tests.Changed -= HandleChanged;
+}

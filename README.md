@@ -431,6 +431,8 @@ also with an empty queue, so that the items the monitoring discovers per partner
 
 In Zabbix (7.0 or later) import the template [`samples/zabbix/as24net_by_http.yaml`](samples/zabbix/as24net_by_http.yaml)
 (*Data collection → Templates → Import*), link it to a host and set the macros `{$AS2.URL}` and `{$AS2.TOKEN}`.
+The template is also downloaded in the administration from *Settings → Monitoring*, with the setup and the address
+of the server for `{$AS2.URL}`.
 It watches the state of the server, every health check, the size of the database and the send queue of every
 partner; the thresholds are the macros `{$AS2.WAITING.MAX.AGE}` (default `1h`) and `{$AS2.MDN.MAX.AGE}`
 (default `4h`), and a partner gets its own with its AS2 name as context, e.g.

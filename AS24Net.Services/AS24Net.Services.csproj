@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+      <InternalsVisibleTo Include="AS24Net.Services.Tests" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\AS24Net.Core\AS24Net.Core.csproj" />
+      <ProjectReference Include="..\AS24Net.DataLayer\AS24Net.DataLayer.csproj" />
+      <ProjectReference Include="..\AS24Net.Domain\AS24Net.Domain.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Havit.Blazor.Components.Web.Bootstrap" />
+    </ItemGroup>
+
+</Project>

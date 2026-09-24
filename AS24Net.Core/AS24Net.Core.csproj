@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <!-- S/MIME: SignedCms and EnvelopedCms. -->
+      <PackageReference Include="System.Security.Cryptography.Pkcs" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <InternalsVisibleTo Include="AS24Net.Core.Tests" />
+    </ItemGroup>
+
+</Project>

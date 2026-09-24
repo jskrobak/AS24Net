@@ -1,0 +1,112 @@
+using Havit.Blazor.Components.Web;
+using Havit.Blazor.Components.Web.Bootstrap;
+using Microsoft.AspNetCore.Components;
+using AS24Net.DataLayer.Filters;
+using AS24Net.DataLayer.Repositories;
+using AS24Net.Domain;
+using AS24Net.Services;
+using AS24Net.Services.Hooks;
+
+namespace AS24Net.Server.Components.Pages;
+
+/// <summary>Transfer history of one category (outgoing, incoming, MDN, certificates, hooks).</summary>
+public partial class TransferLog : ComponentBase
+{
+    /// <summary>URL segments of the sections in the Logs menu.</summary>
+    public static readonly IReadOnlyDictionary<string, (TransferEventCategory Category, string Title)> Sections =
+        new Dictionary<string, (TransferEventCategory, string)>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["outgoing"] = (TransferEventCategory.Outgoing, "Outgoing"),
+            ["incoming"] = (TransferEventCategory.Incoming, "Incoming"),
+            ["mdn"] = (TransferEventCategory.Mdn, "MDN"),
+            ["certificates"] = (TransferEventCategory.Certificate, "Certificate changes"),
+            ["hooks"] = (TransferEventCategory.Hook, "Hooks and webhooks"),
+        };
+
+    [Parameter] public string Section { get; set; } = "";
+
+    [Inject] protected ITransferEventRepository Repository { get; set; } = null!;
+    [Inject] protected GlobalSettingsService GlobalSettingsService { get; set; } = null!;
+    [Inject] protected NavigationManager Navigation { get; set; } = null!;
+    [Inject] protected HookRunner HookRunner { get; set; } = null!;
+    [Inject] protected IHxMessengerService Messenger { get; set; } = null!;
+
+    private static readonly TransferEventLevel[] levels = Enum.GetValues<TransferEventLevel>();
+
+    private TransferEventFilter filterModel = new();
+    private HxGrid<TransferEvent> gridComponent = null!;
+    private HxModal detailModal = null!;
+    private TransferEvent? selected;
+    private int archiveDays = 90;
+    private string? currentSection;
+
+    private string Title => Sections.TryGetValue(Section, out var section) ? section.Title : "Transfer log";
+
+    protected override async Task OnInitializedAsync()
+    {
+        archiveDays = (await GlobalSettingsService.GetGlobalSettingsAsync()).ArchiveEventsAfterDays;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Sections.TryGetValue(Section, out var section))
+        {
+            Navigation.NavigateTo("Logs/outgoing");
+            return;
+        }
+
+        // Switching between sections reuses the component instance: start with a fresh filter.
+        if (currentSection is not null && !string.Equals(currentSection, Section, StringComparison.OrdinalIgnoreCase))
+        {
+            filterModel = new TransferEventFilter { Category = section.Category };
+            if (gridComponent is not null)
+                await gridComponent.RefreshDataAsync();
+        }
+
+        filterModel.Category = section.Category;
+        currentSection = Section;
+    }
+
+    private async Task<GridDataProviderResult<TransferEvent>> GetGridData(GridDataProviderRequest<TransferEvent> request)
+    {
+        var response = await Repository.GetFragmentAsync(filterModel, request, request.CancellationToken);
+        return new GridDataProviderResult<TransferEvent>
+        {
+            Data = response.Data,
+            TotalCount = response.TotalCount
+        };
+    }
+
+    private async Task HandleSelectedAsync(TransferEvent? transferEvent)
+    {
+        selected = transferEvent;
+        if (selected is not null)
+            await detailModal.ShowAsync();
+    }
+
+    private static bool CanRunAgain(TransferEvent? transferEvent) =>
+        transferEvent is { Type: TransferEventType.HookFailed, HookParameters: not null };
+
+    private async Task RunAgainAsync()
+    {
+        if (selected is null)
+            return;
+
+        if (HookRunner.TryRunAgain(selected, out var error))
+        {
+            Messenger.AddInformation("The hook is queued; its result appears in this log.");
+            await detailModal.HideAsync();
+        }
+        else
+        {
+            Messenger.AddError($"The hook cannot be run again: {error}");
+        }
+    }
+
+    private static ThemeColor GetColor(TransferEventLevel level) => level switch
+    {
+        TransferEventLevel.Error => ThemeColor.Danger,
+        TransferEventLevel.Warning => ThemeColor.Warning,
+        _ => ThemeColor.Success
+    };
+}

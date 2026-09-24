@@ -1,0 +1,109 @@
+@page "/Received"
+@rendermode InteractiveServer
+@using Havit.Collections
+@using AS24Net.DataLayer.Filters
+@using AS24Net.Domain
+<style>
+    .scrollable-table-container {
+        overflow: auto;
+        height: calc(100vh - 160px);
+    }
+</style>
+
+<HxModal @ref="detailModal" Title="@(selected?.FileName ?? selected?.MessageId)" Size="ModalSize.Large" ShowCloseButton="true">
+    <BodyTemplate>
+        @if (selected is not null)
+        {
+            <dl class="row mb-0">
+                @Row("Message-ID", selected.MessageId, code: true)
+                <dt class="col-sm-3">State</dt><dd class="col-sm-9"><HxBadge Color="@StatusColor(selected.Status)">@selected.Status</HxBadge></dd>
+                @Row("From", selected.Partner is null ? selected.As2From : $"{selected.Partner.Name} ({selected.As2From})", false)
+                @Row("To", selected.As2To, code: true)
+                @Row("Received", selected.Created.ToString("G"))
+                @Row("Remote address", selected.RemoteAddress)
+                @Row("Subject", selected.Subject)
+                @Row("Content type", selected.ContentType)
+                @Row("Size", selected.Status == ReceivedStatus.Failed ? null : $"{selected.Size:N0} bytes")
+                @Row("Security", Security(selected))
+                @Row("MIC", selected.Mic, code: true)
+                @Row("Disposition", selected.MdnDisposition)
+                @Row("MDN", MdnText(selected))
+                @Row("MDN URL", selected.MdnUrl, code: true)
+                @Row("MDN error", selected.MdnLastError)
+                @Row("Fetched through the API", selected.FetchedDate?.ToString("G"))
+                @Row("File", selected.FilePath, code: true)
+            </dl>
+            @if (!string.IsNullOrEmpty(selected.Error))
+            {
+                <HxAlert Color="ThemeColor.Danger" CssClass="mt-3 small">@selected.Error</HxAlert>
+            }
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        @if (selected?.FilePath is not null)
+        {
+            <a class="btn btn-primary" href="@($"received/{selected.Id}/download")">Download</a>
+        }
+    </FooterTemplate>
+</HxModal>
+
+<HxListLayout Title="Received messages" TFilterModel="ReceivedMessageFilter"
+              @bind-FilterModel="filterModel"
+              @bind-FilterModel:after="gridComponent.RefreshDataAsync">
+    <CommandsTemplate>
+        <HxButton Text="Refresh" Color="ThemeColor.Secondary" Icon="BootstrapIcon.ArrowClockwise" OnClick="() => gridComponent.RefreshDataAsync()" />
+    </CommandsTemplate>
+    <FilterTemplate Context="filterContext">
+        <HxInputText Label="File name or Message-ID" @bind-Value="filterContext.Name" />
+        <HxInputText Label="Partner" Hint="Name or AS2 name" @bind-Value="filterContext.Partner" />
+        <HxSelect TItem="ReceivedStatus" TValue="ReceivedStatus?" Label="State" Data="statuses"
+                  @bind-Value="filterContext.Status" ValueSelector="@(s => (ReceivedStatus?)s)" Nullable="true" NullText="All" />
+        <HxCheckbox Label="Not fetched through the API" @bind-Value="filterContext.OnlyNotFetched" />
+        <HxInputDate TValue="DateTime?" Label="From" @bind-Value="filterContext.From" />
+        <HxInputDate TValue="DateTime?" Label="To" @bind-Value="filterContext.To" />
+    </FilterTemplate>
+    <DataTemplate>
+        <HxGrid @ref="gridComponent"
+                ContentNavigationMode="GridContentNavigationMode.Pagination"
+                PageSize="100"
+                TableContainerCssClass="scrollable-table-container"
+                HeaderRowCssClass="sticky-top"
+                TItem="ReceivedMessage"
+                DataProvider="GetGridData"
+                SelectedDataItem="selected"
+                SelectedDataItemChanged="HandleSelectedAsync"
+                Responsive="true"
+                PreserveSelection="false">
+            <Columns>
+                <HxGridColumn HeaderText="Received" ItemTextSelector="@(m => m.Created.ToString("g"))" SortKeySelector="m => m.Created"
+                              IsDefaultSortColumn="true" SortDirection="SortDirection.Descending" ItemCssClass="text-nowrap" />
+                <HxGridColumn HeaderText="File" ItemTextSelector="@(m => m.FileName)" SortKeySelector="m => m.FileName" />
+                <HxGridColumn HeaderText="From" ItemTextSelector="@(m => m.Partner?.Name ?? m.As2From)" SortKeySelector="m => m.As2From" />
+                <HxGridColumn HeaderText="To" ItemTextSelector="@(m => m.As2To)" SortKeySelector="m => m.As2To" ItemCssClass="a24-code" />
+                <HxGridColumn HeaderText="Size" ItemTextSelector="@(m => m.Size.ToString("N0"))" SortKeySelector="m => m.Size" ItemCssClass="text-end" HeaderCssClass="text-end" />
+                <HxGridColumn HeaderText="State" SortKeySelector="m => m.Status">
+                    <ItemTemplate Context="m">
+                        <HxBadge Color="@StatusColor(m.Status)">@m.Status</HxBadge>
+                        @if (m.FetchedDate is not null)
+                        {
+                            <HxBadge Color="ThemeColor.Light" CssClass="ms-1">fetched</HxBadge>
+                        }
+                    </ItemTemplate>
+                </HxGridColumn>
+                <HxGridColumn HeaderText="MDN" ItemTextSelector="@(m => m.MdnStatus.ToString())" SortKeySelector="m => m.MdnStatus" />
+                <HxGridColumn HeaderText="Error" ItemTextSelector="@(m => m.Error)" ItemCssClass="text-danger small" />
+            </Columns>
+        </HxGrid>
+    </DataTemplate>
+</HxListLayout>
+
+@code {
+    private static RenderFragment Row(string label, string? value, bool code = false) => __builder =>
+    {
+        if (!string.IsNullOrEmpty(value))
+        {
+            <dt class="col-sm-3">@label</dt>
+            <dd class="col-sm-9 @(code ? "a24-code" : "")">@value</dd>
+        }
+    };
+}

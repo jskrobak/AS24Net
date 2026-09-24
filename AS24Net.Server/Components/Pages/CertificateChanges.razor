@@ -1,0 +1,116 @@
+@page "/CertificateChanges"
+@rendermode InteractiveServer
+@using AS24Net.DataLayer.Filters
+@using AS24Net.Domain
+@using AS24Net.Services.Certificates
+@inject AS24Net.Services.ApplicationTimeService AppTime
+<style>
+    .scrollable-table-container {
+        overflow: auto;
+        height: calc(100vh - 160px);
+    }
+</style>
+
+<HxModal @ref="scheduleModal" Title="Schedule a certificate of a partner" ShowCloseButton="true" Size="ModalSize.Large">
+    <BodyTemplate>
+        <p class="small text-body-secondary">
+            Upload the new certificate the partner announced and the time it starts using it. Until then the current
+            certificate stays in use; from then on the new one is used, and the signature certificate it replaces is still
+            accepted for messages and MDNs that were on their way. A time that has passed applies the certificate right away.
+        </p>
+        <HxSelect TItem="Partner" TValue="int?" Label="Partner" Data="partners" @bind-Value="partnerId"
+                  TextSelector="@(p => $"{p.Name} ({p.As2Id})")" ValueSelector="@(p => (int?)p.Id)" Nullable="true" NullText="-select-" />
+        <HxSelect TItem="PartnerCertificateUsage" TValue="PartnerCertificateUsage" Label="Used for" Data="usages" @bind-Value="usage"
+                  TextSelector="@(u => CertificateChangeService.Describe(u))" Nullable="false" />
+
+        <div class="mb-3">
+            <label class="form-label" for="activateAt">Used from (time zone @AppTime.TimeZone.Id)</label>
+            <input id="activateAt" type="datetime-local" class="form-control" @bind="activateAt" @bind:format="yyyy-MM-ddTHH:mm" />
+        </div>
+
+        <HxRadioButtonList TItem="bool" TValue="bool" Label="Certificate" Data="sources" @bind-Value="uploadFile"
+                           ItemTextSelector="@(b => b ? "Upload a file (.cer, .crt, .pem)" : "A stored certificate")" ItemValueSelector="@(b => b)" Inline="true" />
+        @if (uploadFile)
+        {
+            <HxInputFile @ref="inputFileComponent" UploadUrl="/upload" OnFileUploaded="HandleFileUploaded"
+                         Accept=".cer,.crt,.pem,.der,application/x-x509-ca-cert,application/pkix-cert" Multiple="false" MaxFileSize="500000" />
+        }
+        else
+        {
+            <HxSelect TItem="Certificate" TValue="int?" Data="certificates" @bind-Value="certificateId"
+                      TextSelector="@(c => $"{c.Name} (valid {c.ValidFrom:d} - {c.ValidTo:d})")" ValueSelector="@(c => (int?)c.Id)" Nullable="true" NullText="-select-" />
+        }
+
+        <HxInputText Label="Note" CssClass="mt-3" @bind-Value="note" Hint="E.g. where the partner announced the change." />
+    </BodyTemplate>
+    <FooterTemplate>
+        <HxButton Text="Schedule" Color="ThemeColor.Primary" Icon="BootstrapIcon.CalendarPlus" OnClick="HandleScheduleAsync" />
+    </FooterTemplate>
+</HxModal>
+
+<HxListLayout Title="Certificate changes" TFilterModel="CertificateChangeFilter"
+              @bind-FilterModel="filterModel"
+              @bind-FilterModel:after="gridComponent.RefreshDataAsync">
+    <CommandsTemplate>
+        <HxButton Text="Schedule a certificate" Color="ThemeColor.Primary" Icon="BootstrapIcon.CalendarPlus" OnClick="() => ShowScheduleAsync(null)" />
+    </CommandsTemplate>
+    <FilterTemplate Context="filterContext">
+        <HxInputText Label="Partner" @bind-Value="filterContext.PartnerName" />
+        <HxSelect TItem="CertificateChangeStatus" TValue="CertificateChangeStatus?" Label="State" Data="statuses"
+                  @bind-Value="filterContext.Status" ValueSelector="@(s => (CertificateChangeStatus?)s)" Nullable="true" NullText="All" />
+    </FilterTemplate>
+    <DataTemplate>
+        <HxGrid @ref="gridComponent"
+                ContentNavigationMode="GridContentNavigationMode.Pagination"
+                PageSize="200"
+                TableContainerCssClass="scrollable-table-container"
+                HeaderRowCssClass="sticky-top"
+                TItem="CertificateChange"
+                DataProvider="GetGridData"
+                Responsive="true">
+            <Columns>
+                <HxGridColumn HeaderText="Used from" ItemTextSelector="@(c => c.ActivateAt.ToString("g"))" SortKeySelector="c => c.ActivateAt"
+                              IsDefaultSortColumn="true" SortDirection="Havit.Collections.SortDirection.Descending" ItemCssClass="text-nowrap" />
+                <HxGridColumn HeaderText="Partner" ItemTextSelector="@(c => c.PartnerName)" SortKeySelector="c => c.PartnerName" />
+                <HxGridColumn HeaderText="Used for" ItemTextSelector="@(c => CertificateChangeService.Describe(c.Usage))" SortKeySelector="c => c.Usage" />
+                <HxGridColumn HeaderText="Certificate">
+                    <ItemTemplate Context="c">
+                        @if (c.Certificate is { } certificate)
+                        {
+                            <div>@certificate.Name</div>
+                            <div class="small text-body-secondary">valid @certificate.ValidFrom.ToString("d") - @certificate.ValidTo.ToString("d"), <span class="a24-code">@certificate.Thumbprint</span></div>
+                        }
+                    </ItemTemplate>
+                </HxGridColumn>
+                <HxGridColumn HeaderText="State" SortKeySelector="c => c.Status">
+                    <ItemTemplate Context="c">
+                        <HxBadge Color="@StatusColor(c.Status)">@c.Status</HxBadge>
+                        @if (c.AppliedAt is { } applied)
+                        {
+                            <span class="small ms-1">@applied.ToString("g")</span>
+                        }
+                        @if (c.LastError is { } error)
+                        {
+                            <div class="small text-body-secondary">@error</div>
+                        }
+                    </ItemTemplate>
+                </HxGridColumn>
+                <HxGridColumn HeaderText="Note" ItemTextSelector="@(c => c.Note)" ItemCssClass="small" />
+                <HxGridColumn HeaderText="Scheduled" ItemTextSelector="@(c => $"{c.Created:g} {c.CreatedBy}")" SortKeySelector="c => c.Created" ItemCssClass="small" />
+                <HxContextMenuGridColumn Context="change">
+                    <HxContextMenu>
+                        @if (change.Status == CertificateChangeStatus.Scheduled)
+                        {
+                            <HxContextMenuItem Text="Cancel" Icon="BootstrapIcon.XCircle" OnClick="async () => await HandleCancelAsync(change)"
+                                               ConfirmationQuestion="@($"Cancel the certificate change of {change.PartnerName} at {change.ActivateAt:g}?")" />
+                        }
+                        @if (change.CertificateId is { } id)
+                        {
+                            <HxContextMenuItem Text="Download certificate" Icon="BootstrapIcon.Download" OnClick="@(() => Navigation.NavigateTo($"certificates/{id}/download", forceLoad: true))" />
+                        }
+                    </HxContextMenu>
+                </HxContextMenuGridColumn>
+            </Columns>
+        </HxGrid>
+    </DataTemplate>
+</HxListLayout>

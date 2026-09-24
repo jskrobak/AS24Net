@@ -1,0 +1,169 @@
+@page "/Settings"
+@rendermode InteractiveServer
+@using AS24Net.Services.Hooks
+@inject HookRunner HookRunner
+@inject IConfiguration Configuration
+
+<HxCard>
+    <HeaderTemplate>
+        <h5 class="card-title">Settings</h5>
+    </HeaderTemplate>
+    <BodyTemplate>
+        @if (settings is not null)
+        {
+            <EditForm Model="@settings" OnValidSubmit="SaveAsync">
+                <DataAnnotationsValidator />
+
+                <div class="row g-3" style="max-width: 60rem;">
+                    <div class="col-12">
+                        <HxInputText Label="Public URL of the AS2 endpoint"
+                                     Hint="The address partners send to, e.g. https://as2.example.com/as2 (the path /as2 of this server behind the reverse proxy). Sent as the address of asynchronous MDNs."
+                                     @bind-Value="@settings.PublicUrl" InputCssClass="a24-code" />
+                    </div>
+                    <div class="col-12">
+                        <HxInputText Label="Receive directory"
+                                     Hint="@($"Received payloads are stored in a sub-directory per partner (its AS2 name). Relative paths are resolved against {GlobalSettingsService.DataDirectory}.")"
+                                     @bind-Value="@settings.ReceiveDirectory" />
+                    </div>
+                    <div class="col-12">
+                        <HxInputText Label="Outbox directory"
+                                     Hint="@($"Payloads put into the send queue are stored here. Relative paths are resolved against {GlobalSettingsService.DataDirectory}.")"
+                                     @bind-Value="@settings.OutboxDirectory" />
+                    </div>
+
+                    <div class="col-md-6">
+                        <HxInputNumber Label="Send queue interval (seconds)" Hint="A message queued is sent right away; the interval is for retries." Decimals="0" @bind-Value="@settings.SendIntervalSeconds" />
+                    </div>
+                    <div class="col-md-6">
+                        <HxInputNumber Label="Parallel transfers" Hint="Messages sent at the same time, 1 - 100." Decimals="0" @bind-Value="@settings.MaxParallelSends" />
+                    </div>
+                    <div class="col-md-4">
+                        <HxInputNumber Label="Maximum retry count" Decimals="0" @bind-Value="@settings.MaxRetryCount" />
+                    </div>
+                    <div class="col-md-4">
+                        <HxInputNumber Label="First retry after (minutes)" Hint="Every further retry waits twice as long." Decimals="0" @bind-Value="@settings.RetryDelayMinutes" />
+                    </div>
+                    <div class="col-md-4">
+                        <HxInputNumber Label="Longest retry delay (minutes)" Decimals="0" @bind-Value="@settings.MaxRetryDelayMinutes" />
+                    </div>
+                    <div class="col-md-6">
+                        <HxInputNumber Label="Asynchronous MDN retries" Hint="Posting our MDN to a partner is retried this often." Decimals="0" @bind-Value="@settings.MaxMdnRetryCount" />
+                    </div>
+                    <div class="col-md-6">
+                        <HxInputNumber Label="Largest message accepted (MB)" Hint="Messages are opened in memory; larger ones are refused with HTTP 413." Decimals="0" @bind-Value="@settings.MaxMessageSizeMb" />
+                    </div>
+
+                    <div class="col-12">
+                        <HxSubmit Color="ThemeColor.Primary" Icon="BootstrapIcon.Save">Save</HxSubmit>
+                    </div>
+                </div>
+            </EditForm>
+        }
+    </BodyTemplate>
+</HxCard>
+
+<HxCard CssClass="mt-3">
+    <HeaderTemplate>
+        <h5 class="card-title">Retention</h5>
+    </HeaderTemplate>
+    <BodyTemplate>
+        @if (settings is not null)
+        {
+            <p class="small text-body-secondary" style="max-width: 60rem;">
+                Old data is removed every night so that the database stays within bounds. Nothing unfinished is touched
+                (messages waiting, failed or waiting for their MDN), the received payloads stay where they are, and
+                everything removed from the database is written to the archive directory first, as compressed JSON lines
+                per month.
+            </p>
+            <EditForm Model="@settings" OnValidSubmit="SaveAsync">
+                <DataAnnotationsValidator />
+                <div class="row g-3" style="max-width: 60rem;">
+                    <div class="col-md-6">
+                        <HxInputNumber Label="Hide transfer log records after (days)" Hint="Older records are shown only with the complete archive." Decimals="0" @bind-Value="@settings.ArchiveEventsAfterDays" />
+                    </div>
+                    <div class="col-12">
+                        <HxCheckbox Label="Remove old data every night" @bind-Value="@settings.RetentionEnabled" />
+                    </div>
+                    @if (settings.RetentionEnabled)
+                    {
+                        <div class="col-md-6">
+                            <HxInputNumber Label="Remove content after (days)"
+                                           Hint="Details of transfer log records and parameters of hook runs are removed (the record stays), payloads of delivered messages are deleted from the outbox."
+                                           Decimals="0" @bind-Value="@settings.DeleteContentAfterDays" />
+                        </div>
+                        <div class="col-md-6">
+                            <HxInputNumber Label="Delete informational log records after (days)" Hint="At the earliest with the content."
+                                           Decimals="0" @bind-Value="@settings.DeleteInformationEventsAfterDays" />
+                        </div>
+                        <div class="col-md-6">
+                            <HxInputNumber Label="Delete warnings and errors after (days)" Hint="At the earliest with the informational records."
+                                           Decimals="0" @bind-Value="@settings.DeleteEventsAfterDays" />
+                        </div>
+                        <div class="col-md-6">
+                            <HxInputNumber Label="Delete finished messages after (days)"
+                                           Hint="Records of delivered and received messages, at least 30 days (duplicates are recognised by them)."
+                                           Decimals="0" @bind-Value="@settings.DeleteFinishedMessagesAfterDays" />
+                        </div>
+                        <div class="col-12">
+                            <HxInputText Label="Archive directory"
+                                         Hint="@($"Relative paths are resolved against {GlobalSettingsService.DataDirectory}. Back it up with the database.")"
+                                         @bind-Value="@settings.RetentionArchiveDirectory" />
+                        </div>
+                    }
+                    <div class="col-12 d-flex gap-2">
+                        <HxSubmit Color="ThemeColor.Primary" Icon="BootstrapIcon.Save">Save</HxSubmit>
+                        @if (settings.RetentionEnabled)
+                        {
+                            <HxButton Color="ThemeColor.Secondary" Icon="BootstrapIcon.Trash" Spinner="Retention.IsRunning" Enabled="!Retention.IsRunning"
+                                      OnClick="RunRetentionAsync" Tooltip="With the saved settings">Clean up now</HxButton>
+                        }
+                    </div>
+                </div>
+            </EditForm>
+
+            @if (Retention.LastResult is { } result)
+            {
+                <hr />
+                <div class="small" style="max-width: 60rem;">
+                    Last run @result.Finished.ToString("g"): @result.ToString().
+                    @if (result.Error is not null)
+                    {
+                        <HxAlert Color="ThemeColor.Warning" CssClass="py-2 mt-2 mb-0">@result.Error</HxAlert>
+                    }
+                </div>
+            }
+        }
+    </BodyTemplate>
+</HxCard>
+
+<HxCard CssClass="mt-3">
+    <HeaderTemplate>
+        <h5 class="card-title">Hooks and webhooks</h5>
+    </HeaderTemplate>
+    <BodyTemplate>
+        <p class="text-body-secondary small mb-2">
+            Scripts run on events are configured in the application configuration (section <code>Hooks</code>,
+            e.g. environment variable <code>Hooks__OnReceived=/scripts/on_received.sh</code>), not here,
+            so that they cannot be changed from the web interface. They get the parameters as <code>AS2_*</code>
+            environment variables and as a JSON object on their standard input.
+        </p>
+        <table class="table table-sm mb-3" style="max-width: 60rem;">
+            <tbody>
+            @foreach (var hookEvent in Enum.GetValues<HookEvent>())
+            {
+                <tr>
+                    <td style="width: 14rem;"><code>@hookEvent</code></td>
+                    <td>@(HookRunner.ConfiguredHooks.TryGetValue(hookEvent, out var command) ? command : "–")</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        <p class="text-body-secondary small mb-0">
+            Webhook of all events (<code>Webhooks:EventsUrl</code>):
+            @(string.IsNullOrEmpty(Configuration["Webhooks:EventsUrl"]) ? "–" : Configuration["Webhooks:EventsUrl"]);
+            health changes (<code>HealthChecks:WebhookUrl</code>):
+            @(string.IsNullOrEmpty(Configuration["HealthChecks:WebhookUrl"]) ? "–" : Configuration["HealthChecks:WebhookUrl"]).
+            Webhooks per message are registered through the REST API, of received messages per <a href="ApiTokens">API token</a>.
+        </p>
+    </BodyTemplate>
+</HxCard>

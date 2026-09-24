@@ -1,0 +1,10 @@
+**/bin/
+**/obj/
+**/.vs/
+**/.idea/
+**/*.user
+**/.DS_Store
+.git/
+data/
+AS24Net.Core.Tests/
+AS24Net.Services.Tests/

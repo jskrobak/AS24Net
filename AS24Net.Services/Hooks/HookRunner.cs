@@ -1,0 +1,304 @@
+using System.Diagnostics;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Threading.Channels;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using AS24Net.Domain;
+using AS24Net.Services.Health;
+using AS24Net.Services.TransferEvents;
+
+namespace AS24Net.Services.Hooks;
+
+/// <summary>Events that can run a user script (configuration section <c>Hooks</c>).</summary>
+public enum HookEvent
+{
+    /// <summary>A message was received and its payload stored (before the MDN is returned).</summary>
+    OnReceived,
+
+    /// <summary>A received message could not be processed; the partner gets a negative MDN.</summary>
+    OnReceiveFailed,
+
+    /// <summary>A message was accepted by the partner's server (HTTP 2xx).</summary>
+    OnSent,
+
+    /// <summary>Sending a message failed; it may be retried (see <c>AS2_WILL_RETRY</c>).</summary>
+    OnSendFailed,
+
+    /// <summary>The partner confirmed the message with a positive MDN (or accepted it when no MDN was requested).</summary>
+    OnMdnReceived,
+
+    /// <summary>The partner returned a negative MDN, or the MDN was invalid or did not arrive in time.</summary>
+    OnNotDelivered,
+
+    /// <summary>A scheduled certificate of a partner was applied.</summary>
+    OnCertificateApplied,
+}
+
+public sealed class HookOptions
+{
+    /// <summary>Script or executable per event, e.g. <c>Hooks:OnReceived=/scripts/on_received.sh</c>.</summary>
+    public string? OnReceived { get; set; }
+    public string? OnReceiveFailed { get; set; }
+    public string? OnSent { get; set; }
+    public string? OnSendFailed { get; set; }
+    public string? OnMdnReceived { get; set; }
+    public string? OnNotDelivered { get; set; }
+    public string? OnCertificateApplied { get; set; }
+
+    /// <summary>A script running longer is killed.</summary>
+    public int TimeoutSeconds { get; set; } = 60;
+
+    public string? GetCommand(HookEvent hookEvent) => hookEvent switch
+    {
+        HookEvent.OnReceived => OnReceived,
+        HookEvent.OnReceiveFailed => OnReceiveFailed,
+        HookEvent.OnSent => OnSent,
+        HookEvent.OnSendFailed => OnSendFailed,
+        HookEvent.OnMdnReceived => OnMdnReceived,
+        HookEvent.OnNotDelivered => OnNotDelivered,
+        HookEvent.OnCertificateApplied => OnCertificateApplied,
+        _ => null
+    };
+}
+
+public interface IHookDispatcher
+{
+    /// <summary>
+    /// Queues the script configured for the event. Parameters are passed as environment variables
+    /// (<c>AS2_</c> + upper case name) and as a JSON object on standard input. Returns immediately.
+    /// </summary>
+    void Dispatch(HookEvent hookEvent, IReadOnlyDictionary<string, string?> parameters);
+}
+
+/// <summary>
+/// Runs hook scripts one after another in the background, so a slow or failing script never delays or breaks
+/// an AS2 transfer. Hooks still waiting when the application stops are not run.
+/// </summary>
+public sealed class HookRunner(IConfiguration configuration, ILogger<HookRunner> logger, ITransferEventLog? transferEvents = null)
+    : BackgroundService, IHookDispatcher
+{
+    private const int QueueCapacity = 1000;
+
+    /// <summary>Parameter of a run started manually from the log: id of the log record of the failed run it repeats.</summary>
+    public const string RunAgainOfParameter = "runAgainOf";
+
+    // Readable JSON for scripts (no \u escaping of '+' or diacritics); it is not embedded in HTML.
+    private static readonly JsonSerializerOptions JsonOptions = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+    private readonly MonitoredQueue<(HookEvent Event, string Command, Dictionary<string, string?> Parameters)> _queue =
+        new("Hook", QueueCapacity, BoundedChannelFullMode.DropWrite,
+            dropped => logger.LogError("The hook queue is full, {Count} hook(s) not run so far", dropped));
+
+    /// <summary>Hooks waiting to be run.</summary>
+    public QueueState Queue => _queue.State;
+
+    private HookOptions Options => configuration.GetSection("Hooks").Get<HookOptions>() ?? new HookOptions();
+
+    /// <summary>Configured hooks, for display.</summary>
+    public IReadOnlyDictionary<HookEvent, string> ConfiguredHooks
+    {
+        get
+        {
+            var options = Options;
+            return Enum.GetValues<HookEvent>()
+                .Where(e => !string.IsNullOrWhiteSpace(options.GetCommand(e)))
+                .ToDictionary(e => e, e => options.GetCommand(e)!);
+        }
+    }
+
+    public void Dispatch(HookEvent hookEvent, IReadOnlyDictionary<string, string?> parameters)
+    {
+        var command = Options.GetCommand(hookEvent);
+        if (string.IsNullOrWhiteSpace(command))
+            return;
+
+        var all = new Dictionary<string, string?>(parameters)
+        {
+            ["event"] = hookEvent.ToString(),
+            ["timestamp"] = DateTimeOffset.Now.ToString("O"),
+        };
+
+        // A full queue drops the hook and reports it (MonitoredQueue).
+        _queue.Writer.TryWrite((hookEvent, command, all));
+    }
+
+    /// <summary>
+    /// Queues the script currently configured for the event of a failed run again, with the parameters of that run
+    /// (<c>AS2_TIMESTAMP</c> stays the time of the original event) and <c>AS2_RUN_AGAIN_OF</c> set to the id of its
+    /// log record. Returns <c>false</c> with the reason when it cannot be run.
+    /// </summary>
+    public bool TryRunAgain(TransferEvent failedRun, out string? error)
+    {
+        Dictionary<string, string?>? parameters = null;
+        try
+        {
+            if (failedRun.HookParameters is not null)
+                parameters = JsonSerializer.Deserialize<Dictionary<string, string?>>(failedRun.HookParameters);
+        }
+        catch (JsonException)
+        {
+        }
+
+        if (failedRun.Category != TransferEventCategory.Hook || parameters is null
+            || !parameters.TryGetValue("event", out var eventName) || !Enum.TryParse<HookEvent>(eventName, out var hookEvent))
+        {
+            error = "The record does not contain the parameters of a hook run.";
+            return false;
+        }
+
+        var command = Options.GetCommand(hookEvent);
+        if (string.IsNullOrWhiteSpace(command))
+        {
+            error = $"No script is configured for {hookEvent}.";
+            return false;
+        }
+
+        parameters[RunAgainOfParameter] = failedRun.Id.ToString();
+        if (!_queue.Writer.TryWrite((hookEvent, command, parameters)))
+        {
+            error = "The hook queue is full.";
+            return false;
+        }
+
+        logger.LogInformation("Hook {Event} ({Command}) queued to run again (log record {Id})", hookEvent, command, failedRun.Id);
+        error = null;
+        return true;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        await foreach (var (hookEvent, command, parameters) in _queue.Reader.ReadAllAsync(stoppingToken))
+        {
+            try
+            {
+                await RunAsync(hookEvent, command, parameters, TimeSpan.FromSeconds(Options.TimeoutSeconds), stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Hook {Event} ({Command}) could not be started", hookEvent, command);
+                RecordRun(hookEvent, command, parameters, TransferEventLevel.Error,
+                    $"{hookEvent}: {command} could not be started: {ex.Message}", ex.ToString(), null);
+            }
+        }
+    }
+
+    /// <summary>Runs the command and waits for it. Returns the exit code, or <c>null</c> when it was killed.</summary>
+    public async Task<int?> RunAsync(HookEvent hookEvent, string command, IReadOnlyDictionary<string, string?> parameters,
+        TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        var startInfo = new ProcessStartInfo(command)
+        {
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        foreach (var (name, value) in parameters)
+            startInfo.Environment[ToEnvironmentName(name)] = value ?? "";
+
+        var stopwatch = Stopwatch.StartNew();
+        using var process = Process.Start(startInfo)
+                            ?? throw new InvalidOperationException($"Process '{command}' did not start.");
+
+        var output = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var error = process.StandardError.ReadToEndAsync(cancellationToken);
+
+        try
+        {
+            await process.StandardInput.WriteAsync(JsonSerializer.Serialize(parameters, JsonOptions));
+            process.StandardInput.Close();
+        }
+        catch (IOException)
+        {
+            // The script does not read its input.
+        }
+
+        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutSource.CancelAfter(timeout);
+        try
+        {
+            await process.WaitForExitAsync(timeoutSource.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            process.Kill(entireProcessTree: true);
+            if (cancellationToken.IsCancellationRequested)
+                throw;
+
+            logger.LogError("Hook {Event} ({Command}) was killed after {Timeout} seconds", hookEvent, command, timeout.TotalSeconds);
+            RecordRun(hookEvent, command, parameters, TransferEventLevel.Error,
+                $"{hookEvent}: {command} was killed after {timeout.TotalSeconds:0} seconds", null, stopwatch.ElapsedMilliseconds);
+            return null;
+        }
+
+        var stdout = (await output).Trim();
+        var stderr = (await error).Trim();
+
+        if (process.ExitCode == 0)
+            logger.LogInformation("Hook {Event} ({Command}) finished{Output}", hookEvent, command,
+                stdout.Length > 0 ? ": " + stdout : "");
+        else
+            logger.LogError("Hook {Event} ({Command}) failed with exit code {ExitCode}: {Error}", hookEvent, command,
+                process.ExitCode, stderr.Length > 0 ? stderr : stdout);
+
+        var details = string.Join(Environment.NewLine + Environment.NewLine,
+            new[] { stdout.Length > 0 ? "Output:" + Environment.NewLine + stdout : null,
+                    stderr.Length > 0 ? "Errors:" + Environment.NewLine + stderr : null }.Where(t => t is not null));
+        RecordRun(hookEvent, command, parameters,
+            process.ExitCode == 0 ? TransferEventLevel.Information : TransferEventLevel.Error,
+            $"{hookEvent}: {command} exited with code {process.ExitCode}", details.Length > 0 ? details : null,
+            stopwatch.ElapsedMilliseconds);
+
+        return process.ExitCode;
+    }
+
+    private void RecordRun(HookEvent hookEvent, string command, IReadOnlyDictionary<string, string?> parameters,
+        TransferEventLevel level, string message, string? details, long? durationMs)
+    {
+        if (transferEvents is null)
+            return;
+
+        parameters.TryGetValue("fileName", out var fileName);
+        parameters.TryGetValue("partnerName", out var partnerName);
+        parameters.TryGetValue("messageId", out var messageId);
+        parameters.TryGetValue("outgoingMessageId", out var outgoingMessageId);
+        parameters.TryGetValue("receivedMessageId", out var receivedMessageId);
+        if (parameters.ContainsKey(RunAgainOfParameter))
+            message += " (run again manually)";
+        transferEvents.Record(new TransferEvent
+        {
+            Category = TransferEventCategory.Hook,
+            Type = level == TransferEventLevel.Information ? TransferEventType.HookFinished : TransferEventType.HookFailed,
+            Level = level,
+            Message = message,
+            Details = details,
+            DurationMs = durationMs,
+            PartnerName = partnerName,
+            FileName = fileName,
+            MessageId = messageId,
+            OutgoingMessageId = int.TryParse(outgoingMessageId, out var id) ? id : null,
+            ReceivedMessageId = int.TryParse(receivedMessageId, out id) ? id : null,
+            HookParameters = JsonSerializer.Serialize(parameters, JsonOptions),
+        });
+    }
+
+    /// <summary>"fileName" -> "AS2_FILE_NAME".</summary>
+    public static string ToEnvironmentName(string name)
+    {
+        var chars = new List<char> { 'A', 'S', '2', '_' };
+        for (var i = 0; i < name.Length; i++)
+        {
+            if (char.IsUpper(name[i]) && i > 0)
+                chars.Add('_');
+            chars.Add(char.ToUpperInvariant(name[i]));
+        }
+
+        return new string(chars.ToArray());
+    }
+}

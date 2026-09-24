@@ -1,0 +1,149 @@
+@page "/"
+@rendermode InteractiveServer
+@using Microsoft.Extensions.Diagnostics.HealthChecks
+@using AS24Net.Domain
+<style>
+    .card-header {
+        background-color: var(--bs-card-bg);
+        padding-top: 15px !important;
+        padding-bottom: 15px !important;
+    }
+</style>
+
+<HxCard>
+    <HeaderTemplate>
+        <h5 class="card-title me-auto">Dashboard</h5>
+    </HeaderTemplate>
+    <BodyTemplate>
+        <div class="d-flex flex-wrap gap-3">
+            <HxCard style="width: 26rem;">
+                <HeaderTemplate>
+                    <HxCardTitle>Send service</HxCardTitle>
+                </HeaderTemplate>
+                <BodyTemplate>
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            @if (!SendService.IsRunning)
+                            {
+                                <HxBadge Color="ThemeColor.Danger">Stopped</HxBadge>
+                            }
+                            else if (SendService.IsPaused)
+                            {
+                                <HxBadge Color="ThemeColor.Warning">Paused</HxBadge>
+                            }
+                            else
+                            {
+                                <HxBadge Color="ThemeColor.Success">Running</HxBadge>
+                            }
+                            <div class="small text-body-secondary mt-1">Last run: @(SendService.LastRun?.ToString("g") ?? "never")</div>
+                            <div class="small text-body-secondary">Transfers running: @SendService.ActiveTransfers</div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <HxButton Color="ThemeColor.Primary" Tooltip="Send now" OnClick="SendService.Trigger" Icon="BootstrapIcon.Send" />
+                            <HxButton Color="ThemeColor.Secondary" Tooltip="@(SendService.IsPaused ? "Resume" : "Pause")"
+                                      OnClick="ToggleSendService"
+                                      Icon="@(SendService.IsPaused ? BootstrapIcon.Play : BootstrapIcon.Pause)" />
+                        </div>
+                    </div>
+                </BodyTemplate>
+            </HxCard>
+
+            <HxCard style="width: 26rem;">
+                <HeaderTemplate>
+                    <HxCardTitle>Messages</HxCardTitle>
+                </HeaderTemplate>
+                <BodyTemplate>
+                    <HxListGroup>
+                        @Count("Waiting to be sent", waiting, "Outgoing", ThemeColor.Secondary)
+                        @Count("Waiting for a retry", retrying, "Outgoing", ThemeColor.Warning)
+                        @Count("Waiting for the asynchronous MDN", awaitingMdn, "Outgoing", ThemeColor.Info)
+                        @Count("Failed or not delivered", failed, "Outgoing", ThemeColor.Danger)
+                        @Count("Received, not fetched through the API", toFetch, "Received", ThemeColor.Primary)
+                    </HxListGroup>
+                </BodyTemplate>
+            </HxCard>
+
+            <HxCard style="width: 26rem;">
+                <HeaderTemplate>
+                    <HxCardTitle>AS2 endpoint</HxCardTitle>
+                </HeaderTemplate>
+                <BodyTemplate>
+                    @if (string.IsNullOrEmpty(publicUrl))
+                    {
+                        <div class="text-body-secondary small mb-2">
+                            Partners post messages and MDNs to <code>/as2</code> of this server. Set its public address in
+                            <a href="Settings">Settings</a>: it is given to partners and needed for asynchronous MDNs.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="a24-code user-select-all">@publicUrl</div>
+                        <div class="small text-body-secondary mt-1">Give it to your partners together with the AS2 names of your identities and your certificate.</div>
+                    }
+                    @if (scheduled.Count > 0)
+                    {
+                        <div class="fw-bold mt-3 mb-1">Scheduled certificate changes</div>
+                        <HxListGroup>
+                            @foreach (var change in scheduled.Take(5))
+                            {
+                                <HxListGroupItem CssClass="d-flex justify-content-between">
+                                    <span>@change.PartnerName</span>
+                                    <span class="small text-body-secondary">@change.ActivateAt.ToString("g")</span>
+                                </HxListGroupItem>
+                            }
+                        </HxListGroup>
+                    }
+                </BodyTemplate>
+            </HxCard>
+
+            <HxCard style="width: 40rem;">
+                <HeaderTemplate>
+                    <HxCardTitle>Health</HxCardTitle>
+                </HeaderTemplate>
+                <BodyTemplate>
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            @if (HealthMonitor.Report is { } report)
+                            {
+                                <HxBadge Color="@StatusColor(report.Status)">@report.Status</HxBadge>
+                                <div class="small text-body-secondary mt-1">Checked: @HealthMonitor.Checked?.ToString("g")</div>
+                            }
+                            else
+                            {
+                                <span class="text-body-secondary">The checks have not run yet.</span>
+                            }
+                        </div>
+                        <HxButton Color="ThemeColor.Secondary" Tooltip="Check now" OnClick="CheckHealthAsync" Icon="BootstrapIcon.ArrowClockwise" />
+                    </div>
+                    @if (HealthMonitor.Report is { } entries)
+                    {
+                        <HxListGroup>
+                            @foreach (var (name, entry) in entries.Entries)
+                            {
+                                <HxListGroupItem CssClass="d-flex justify-content-between align-items-start">
+                                    <div class="me-auto">
+                                        <div class="fw-bold">@name</div>
+                                        <div class="small @(entry.Status == HealthStatus.Healthy ? "text-body-secondary" : "")">
+                                            @(entry.Description ?? entry.Exception?.Message)
+                                        </div>
+                                    </div>
+                                    <HxBadge Color="@StatusColor(entry.Status)">@entry.Status</HxBadge>
+                                </HxListGroupItem>
+                            }
+                        </HxListGroup>
+                    }
+                </BodyTemplate>
+            </HxCard>
+        </div>
+    </BodyTemplate>
+</HxCard>
+
+@code {
+    private static RenderFragment Count(string label, int count, string href, ThemeColor color) => __builder =>
+    {
+        <HxListGroupItem CssClass="d-flex justify-content-between align-items-center">
+            <a href="@href" class="text-reset text-decoration-none">@label</a>
+            <HxBadge Color="@(count == 0 ? ThemeColor.Light : color)">@count</HxBadge>
+        </HxListGroupItem>
+    };
+}

@@ -1,0 +1,17 @@
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.DotSettings.user
+.DS_Store
+appsettings.*.local.json
+appsettings.Entity.*.local.json
+/data/
+**/uploads/
+**/logs/
+TestResults/
+received/
+outbox/
+# Retention archive written into the data directory.
+archive/

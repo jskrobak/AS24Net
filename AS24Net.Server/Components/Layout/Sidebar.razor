@@ -1,0 +1,75 @@
+@inject NavigationManager NavigationManager
+
+
+<HxSidebar CssClass="sticky-md-top sidebar" CollapsedChanged="HandleCollapsedChanged" Collapsed="@isCollapsed">
+    <HeaderTemplate>
+        <HxSidebarBrand BrandName="AS24Net" BrandNameShort="A24">
+            <LogoTemplate>
+                <img src="logo.svg" alt="" width="28" height="28" class="me-2" />
+            </LogoTemplate>
+        </HxSidebarBrand>
+    </HeaderTemplate>
+    <ItemsTemplate>
+
+        <HxSidebarItem Text="Home" Href="" Match="NavLinkMatch.All" Icon="BootstrapIcon.House" TooltipText="Home"/>
+        <HxSidebarItem Text="Identities" Href="Identities" Match="NavLinkMatch.All" Icon="BootstrapIcon.Person" TooltipText="Our AS2 stations"/>
+        <HxSidebarItem Text="Partners" Href="Partners" Match="NavLinkMatch.All" Icon="BootstrapIcon.People" TooltipText="Remote AS2 stations"/>
+        <HxSidebarItem Text="Certificate changes" Href="CertificateChanges" Match="NavLinkMatch.All" Icon="BootstrapIcon.CalendarCheck" TooltipText="Partner certificates scheduled in advance"/>
+
+        <HxSidebarItem Text="Messages" Icon="BootstrapIcon.Envelope">
+            <HxSidebarItem Text="Outgoing" Href="Outgoing" Match="NavLinkMatch.All" Icon="BootstrapIcon.Send" TooltipText="Send queue"/>
+            <HxSidebarItem Text="Received" Href="Received" Match="NavLinkMatch.All" Icon="BootstrapIcon.Inbox" TooltipText="Messages received from partners"/>
+        </HxSidebarItem>
+
+        <HxSidebarItem Text="Logs" Icon="BootstrapIcon.Lightbulb">
+            <HxSidebarItem Text="Outgoing" Href="Logs/outgoing" Match="NavLinkMatch.All" Icon="BootstrapIcon.BoxArrowUpRight" TooltipText="Sent messages"/>
+            <HxSidebarItem Text="Incoming" Href="Logs/incoming" Match="NavLinkMatch.All" Icon="BootstrapIcon.BoxArrowInDownLeft" TooltipText="Received messages"/>
+            <HxSidebarItem Text="MDN" Href="Logs/mdn" Match="NavLinkMatch.All" Icon="BootstrapIcon.CheckAll" TooltipText="Message Disposition Notifications"/>
+            <HxSidebarItem Text="Certificates" Href="Logs/certificates" Match="NavLinkMatch.All" Icon="BootstrapIcon.ShieldCheck" TooltipText="Certificate changes of partners"/>
+            <HxSidebarItem Text="Hooks, webhooks" Href="Logs/hooks" Match="NavLinkMatch.All" Icon="BootstrapIcon.Terminal" TooltipText="Event hook scripts and webhook calls"/>
+            <HxSidebarItem Text="Log stream" Href="Log" Match="NavLinkMatch.All" Icon="BootstrapIcon.Lightning" TooltipText="Live technical log"/>
+        </HxSidebarItem>
+
+        <HxSidebarItem Text="Settings" Icon="BootstrapIcon.Gear">
+            <HxSidebarItem Text="Certificates" Href="Certificates" Match="NavLinkMatch.All" Icon="BootstrapIcon.Key" TooltipText="Certificates"/>
+            <HxSidebarItem Text="General" Href="Settings" Match="NavLinkMatch.All" Icon="BootstrapIcon.Sliders" TooltipText="General settings"/>
+            <HxSidebarItem Text="REST API" Href="ApiReference" Match="NavLinkMatch.All" Icon="BootstrapIcon.FileEarmarkCode"
+                           CssClass="@ExternalLinkCssClass" TooltipText="REST API documentation (opens in a new tab)"/>
+            <HxSidebarItem Text="API tokens" Href="ApiTokens" Match="NavLinkMatch.All" Icon="BootstrapIcon.Braces" TooltipText="Tokens for the REST API"/>
+            <HxSidebarItem Text="Users" Href="Users" Match="NavLinkMatch.All" Icon="BootstrapIcon.PersonLock" TooltipText="Users of the administration"/>
+        </HxSidebarItem>
+
+    </ItemsTemplate>
+    <FooterTemplate>
+        @* HxSidebarItem can only be used in ItemsTemplate, so the footer actions are built from the same styles. *@
+        <div class="sidebar-footer-actions">
+            <AuthorizeView Context="auth">
+                @* A user who signed in with Entra ID has no password here. *@
+                @if (!auth.User.HasClaim(AuthClaims.SignedInWithEntra, "true"))
+                {
+                    <a href="ChangePassword" class="sidebar-action" title="@($"Change password of {auth.User.Identity?.Name}")">
+                        <HxIcon Icon="BootstrapIcon.Key" CssClass="sidebar-action-icon"/>
+                        @if (!isCollapsed)
+                        {
+                            <span>Change password</span>
+                        }
+                    </a>
+                }
+
+                @* Signing out has to be a POST with an antiforgery token. *@
+                <form method="post" action="account/logout" data-enhance="false">
+                    <AntiforgeryToken/>
+                    <button type="submit" class="sidebar-action" title="@($"Sign out {auth.User.Identity?.Name}")">
+                        <HxIcon Icon="BootstrapIcon.BoxArrowRight" CssClass="sidebar-action-icon"/>
+                        @if (!isCollapsed)
+                        {
+                            <span>Sign out</span>
+                        }
+                    </button>
+                </form>
+            </AuthorizeView>
+
+            <AS24Net.Server.Components.ColorMode.ColorModeSwitcher CssClass="sidebar-action" ShowText="@(!isCollapsed)"/>
+        </div>
+    </FooterTemplate>
+</HxSidebar>

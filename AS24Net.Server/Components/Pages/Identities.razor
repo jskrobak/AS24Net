@@ -1,0 +1,92 @@
+@page "/Identities"
+@rendermode InteractiveServer
+@using AS24Net.DataLayer.Filters
+@using AS24Net.Domain
+<style>
+    .scrollable-table-container {
+        overflow: auto;
+        height: calc(100vh - 160px);
+    }
+</style>
+<HxModal @ref="identityEditModal" ShowCloseButton="true">
+    <HeaderTemplate>
+        @(currentIdentity?.Id > 0 ? $"Identity {currentIdentity.Name}" : "New identity")
+    </HeaderTemplate>
+    <BodyTemplate>
+        @if (currentIdentity is not null)
+        {
+            <EditForm Model="@currentIdentity" OnValidSubmit="SaveIdentity">
+                <DataAnnotationsValidator />
+
+                <HxInputText Label="Name" @bind-Value="@currentIdentity.Name" />
+                <HxInputText Label="Description" @bind-Value="@currentIdentity.Description" />
+                <HxInputText Label="AS2 name" Hint="Our AS2-From, the AS2-To of the partners' messages; 1 - 128 printable characters."
+                             @bind-Value="@currentIdentity.As2Id" InputCssClass="a24-code" />
+                <HxInputText Label="E-mail" Hint="Sent in Disposition-Notification-To when an MDN is requested (optional)." @bind-Value="@currentIdentity.Email" />
+
+                <HxSelect TItem="Certificate" TValue="int?" Label="Signing certificate"
+                          Hint="Our messages and MDNs are signed with it. Give its public part to the partners."
+                          Data="ownCertificates" @bind-Value="@currentIdentity.SigningCertificateId"
+                          TextSelector="@(c => $"{c.Name} (valid to {c.ValidTo:d})")" ValueSelector="@(c => (int?)c.Id)"
+                          Nullable="true" NullText="-none-" />
+                <HxSelect TItem="Certificate" TValue="int?" Label="Decryption certificate"
+                          Hint="Partners encrypt their messages for it; the one it replaces is still used for a while."
+                          Data="ownCertificates" @bind-Value="@currentIdentity.DecryptionCertificateId"
+                          TextSelector="@(c => $"{c.Name} (valid to {c.ValidTo:d})")" ValueSelector="@(c => (int?)c.Id)"
+                          Nullable="true" NullText="-none-" />
+                @if (currentIdentity.PreviousDecryptionCertificateId is { } previous)
+                {
+                    <div class="small text-body-secondary mb-3">
+                        Messages encrypted for the previous certificate (@ownCertificates.FirstOrDefault(c => c.Id == previous)?.Name) are decrypted too.
+                        <HxButton Size="ButtonSize.Small" Color="ThemeColor.Link" Text="Stop accepting it"
+                                  OnClick="() => currentIdentity.PreviousDecryptionCertificateId = null" />
+                    </div>
+                }
+
+                <HxSubmit Color="ThemeColor.Primary">Save</HxSubmit>
+            </EditForm>
+        }
+    </BodyTemplate>
+</HxModal>
+
+<HxListLayout Title="Identities" TFilterModel="IdentityFilter"
+              @bind-FilterModel="filterModel"
+              @bind-FilterModel:after="gridComponent.RefreshDataAsync">
+    <CommandsTemplate>
+        <HxButton Text="New identity"
+                  Color="ThemeColor.Primary"
+                  Icon="BootstrapIcon.PlusLg" OnClick="HandleNewItemClicked" />
+    </CommandsTemplate>
+    <FilterTemplate Context="filterContext">
+        <HxInputText Label="Name or AS2 name" @bind-Value="filterContext.Name" />
+    </FilterTemplate>
+    <DataTemplate>
+        <HxGrid @ref="gridComponent"
+                ContentNavigationMode="GridContentNavigationMode.Pagination"
+                PageSize="1000"
+                TableContainerCssClass="scrollable-table-container"
+                HeaderRowCssClass="sticky-top"
+                TItem="Identity"
+                DataProvider="GetGridData"
+                SelectedDataItem="currentIdentity"
+                SelectedDataItemChanged="HandleSelectedAsync"
+                Responsive="true"
+                PreserveSelection="false">
+            <Columns>
+                <HxGridColumn HeaderText="Name" ItemTextSelector="@(d => d.Name)" SortKeySelector="d => d.Name" IsDefaultSortColumn="true"/>
+                <HxGridColumn HeaderText="AS2 name" ItemTextSelector="@(d => d.As2Id)" SortKeySelector="d => d.As2Id" ItemCssClass="a24-code"/>
+                <HxGridColumn HeaderText="Description" ItemTextSelector="@(d => d.Description)" SortKeySelector="d => d.Description"/>
+                <HxGridColumn HeaderText="Signing" ItemTextSelector="@(d => CertificateName(d.SigningCertificateId))"/>
+                <HxGridColumn HeaderText="Decryption" ItemTextSelector="@(d => CertificateName(d.DecryptionCertificateId))"/>
+
+                <HxContextMenuGridColumn Context="identity">
+                    <HxContextMenu>
+                        <HxContextMenuItem Text="Edit" Icon="BootstrapIcon.Pen" OnClick="async () => await HandleSelectedAsync(identity)" />
+                        <HxContextMenuItem Text="Delete" Icon="BootstrapIcon.Trash" OnClick="async () => await HandleDeleteClick(identity)"
+                                           ConfirmationQuestion="@($"Delete identity {identity.Name}? Its messages in the send queue are deleted too.")"/>
+                    </HxContextMenu>
+                </HxContextMenuGridColumn>
+            </Columns>
+        </HxGrid>
+    </DataTemplate>
+</HxListLayout>

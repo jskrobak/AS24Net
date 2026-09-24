@@ -1,0 +1,94 @@
+using Havit.Blazor.Components.Web.Bootstrap;
+using Havit.Data.EntityFrameworkCore;
+using Havit.Data.EntityFrameworkCore.Patterns.Caching;
+using Havit.Data.EntityFrameworkCore.Patterns.Repositories;
+using Havit.Data.EntityFrameworkCore.Patterns.SoftDeletes;
+using Havit.Data.Patterns.DataLoaders;
+using Havit.Data.Patterns.Infrastructure;
+using Microsoft.EntityFrameworkCore;
+using AS24Net.DataLayer.Filters;
+using AS24Net.Domain;
+
+namespace AS24Net.DataLayer.Repositories;
+
+public class TransferEventRepository(
+    IDbContext dbContext,
+    IEntityKeyAccessor<TransferEvent, int> entityKeyAccessor,
+    IDataLoader dataLoader,
+    ISoftDeleteManager softDeleteManager,
+    IEntityCacheManager entityCacheManager,
+    IRepositoryQueryProvider<TransferEvent, int> repositoryQueryProvider)
+    : DbRepository<TransferEvent, int>(dbContext, entityKeyAccessor, dataLoader, softDeleteManager, entityCacheManager,
+        repositoryQueryProvider), ITransferEventRepository
+{
+    public async Task<DataFragment<TransferEvent>> GetFragmentAsync(TransferEventFilter filter,
+        GridDataProviderRequest<TransferEvent> request, CancellationToken cancellationToken = default)
+    {
+        var filtered = filter.Apply(Data.AsNoTracking());
+
+        var cnt = await filtered.CountAsync(cancellationToken);
+
+        var data = await filtered.ApplyGridDataProviderRequest<TransferEvent>(request)
+            .ToListAsync(cancellationToken);
+
+        return new DataFragment<TransferEvent>
+        {
+            Data = data,
+            TotalCount = cnt
+        };
+    }
+
+    public async Task<DataFragment<TransferEvent>> GetListAsync(TransferEventFilter filter, int skip, int take,
+        CancellationToken cancellationToken = default)
+    {
+        var filtered = filter.Apply(Data.AsNoTracking());
+        var count = await filtered.CountAsync(cancellationToken);
+        var items = await filtered
+            .OrderByDescending(e => e.Id)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+
+        return new DataFragment<TransferEvent> { Data = items, TotalCount = count };
+    }
+
+    public async Task<int> ArchiveOlderThanAsync(DateTime cutoff, CancellationToken cancellationToken = default)
+    {
+        return await Data
+            .Where(e => !e.IsArchived && e.Timestamp < cutoff)
+            .ExecuteUpdateAsync(s => s.SetProperty(e => e.IsArchived, true), cancellationToken);
+    }
+
+    public Task<List<TransferEvent>> GetNextOlderThanAsync(DateTime before, DateTime? afterTimestamp, int afterId, int take,
+        CancellationToken cancellationToken = default)
+    {
+        var query = Data.AsNoTracking().Where(e => e.Timestamp < before);
+        if (afterTimestamp is { } timestamp)
+            query = query.Where(e => e.Timestamp > timestamp || e.Timestamp == timestamp && e.Id > afterId);
+
+        return query.OrderBy(e => e.Timestamp).ThenBy(e => e.Id).Take(take).ToListAsync(cancellationToken);
+    }
+
+    public Task ClearDetailsAsync(IReadOnlyCollection<int> ids, CancellationToken cancellationToken = default)
+    {
+        return Data
+            .Where(e => ids.Contains(e.Id) && (e.Details != null || e.HookParameters != null))
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(e => e.Details, (string?)null)
+                .SetProperty(e => e.HookParameters, (string?)null), cancellationToken);
+    }
+
+    public async Task<int> DeleteOldAsync(DateTime exportedTimestamp, int exportedId, DateTime informationBefore,
+        DateTime othersBefore, int take, CancellationToken cancellationToken = default)
+    {
+        var ids = await Data
+            .Where(e => (e.Timestamp < exportedTimestamp || e.Timestamp == exportedTimestamp && e.Id <= exportedId)
+                        && (e.Timestamp < othersBefore || e.Level == TransferEventLevel.Information && e.Timestamp < informationBefore))
+            .OrderBy(e => e.Id)
+            .Select(e => e.Id)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+
+        return ids.Count == 0 ? 0 : await Data.Where(e => ids.Contains(e.Id)).ExecuteDeleteAsync(cancellationToken);
+    }
+}

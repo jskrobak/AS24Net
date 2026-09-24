@@ -1,0 +1,172 @@
+html, body {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
+/* The colours of the logo, shared with Oftp4Net: navy leads, amber is the accent. Bootstrap is not rebuilt, only
+   its variables are set, so an update of the framework keeps working. */
+:root {
+    --a24-navy: #0f2a4a;
+    --a24-navy-hover: #163c68;
+    --a24-navy-light: #4f8ccc;
+    --a24-amber: #f5a524;
+    --a24-amber-dark: #c77f00;
+}
+
+:root, [data-bs-theme="light"] {
+    --bs-primary: var(--a24-navy);
+    --bs-primary-rgb: 15, 42, 74;
+    --bs-link-color: #14416f;
+    --bs-link-color-rgb: 20, 65, 111;
+    --bs-link-hover-color: var(--a24-navy);
+    --bs-link-hover-color-rgb: 15, 42, 74;
+    --bs-focus-ring-color: rgba(15, 42, 74, 0.25);
+    /* The amber of the logo instead of the Bootstrap yellow, so that the two do not sit next to each other. */
+    --bs-warning: var(--a24-amber);
+    --bs-warning-rgb: 245, 165, 36;
+    --bs-warning-bg-subtle: #fdf1dc;
+    --bs-warning-border-subtle: #f6d79a;
+    --bs-warning-text-emphasis: #7a4f00;
+}
+
+[data-bs-theme="dark"] {
+    /* Navy disappears on a dark background, so the lighter shade of the brand leads there. */
+    --bs-primary: var(--a24-navy-light);
+    --bs-primary-rgb: 79, 140, 204;
+    --bs-link-color: #7fb0e3;
+    --bs-link-color-rgb: 127, 176, 227;
+    --bs-link-hover-color: #a6c9ee;
+    --bs-link-hover-color-rgb: 166, 201, 238;
+    --bs-focus-ring-color: rgba(79, 140, 204, 0.3);
+    --bs-warning: var(--a24-amber);
+    --bs-warning-rgb: 245, 165, 36;
+}
+
+.btn-primary {
+    --bs-btn-bg: var(--a24-navy);
+    --bs-btn-border-color: var(--a24-navy);
+    --bs-btn-hover-bg: var(--a24-navy-hover);
+    --bs-btn-hover-border-color: var(--a24-navy-hover);
+    --bs-btn-active-bg: #0a1e36;
+    --bs-btn-active-border-color: #0a1e36;
+    --bs-btn-disabled-bg: var(--a24-navy);
+    --bs-btn-disabled-border-color: var(--a24-navy);
+}
+
+[data-bs-theme="dark"] .btn-primary {
+    --bs-btn-bg: var(--a24-navy-light);
+    --bs-btn-border-color: var(--a24-navy-light);
+    --bs-btn-hover-bg: #6ea4db;
+    --bs-btn-hover-border-color: #6ea4db;
+    --bs-btn-active-bg: #3f76b0;
+    --bs-btn-active-border-color: #3f76b0;
+    --bs-btn-color: #08121f;
+    --bs-btn-hover-color: #08121f;
+    --bs-btn-active-color: #08121f;
+}
+
+.btn-outline-primary {
+    --bs-btn-color: var(--a24-navy);
+    --bs-btn-border-color: var(--a24-navy);
+    --bs-btn-hover-bg: var(--a24-navy);
+    --bs-btn-hover-border-color: var(--a24-navy);
+    --bs-btn-active-bg: var(--a24-navy);
+    --bs-btn-active-border-color: var(--a24-navy);
+}
+
+/* The warning button keeps dark text on the amber of the logo. */
+.btn-warning {
+    --bs-btn-bg: var(--a24-amber);
+    --bs-btn-border-color: var(--a24-amber);
+    --bs-btn-color: #1a1300;
+    --bs-btn-hover-bg: #ffb53d;
+    --bs-btn-hover-border-color: #ffb53d;
+    --bs-btn-hover-color: #1a1300;
+    --bs-btn-active-bg: var(--a24-amber-dark);
+    --bs-btn-active-border-color: var(--a24-amber-dark);
+    --bs-btn-active-color: #1a1300;
+}
+
+.content {
+    padding-top: 1.1rem;
+}
+
+h1:focus {
+    outline: none;
+}
+
+.valid.modified:not([type=checkbox]) {
+    outline: 1px solid #26b050;
+}
+
+.invalid {
+    outline: 1px solid #e50000;
+}
+
+.validation-message {
+    color: #e50000;
+}
+
+.blazor-error-boundary {
+    background: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTYiIGhlaWdodD0iNDkiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIG92ZXJmbG93PSJoaWRkZW4iPjxkZWZzPjxjbGlwUGF0aCBpZD0iY2xpcDAiPjxyZWN0IHg9IjIzNSIgeT0iNTEiIHdpZHRoPSI1NiIgaGVpZ2h0PSI0OSIvPjwvY2xpcFBhdGg+PC9kZWZzPjxnIGNsaXAtcGF0aD0idXJsKCNjbGlwMCkiIHRyYW5zZm9ybT0idHJhbnNsYXRlKC0yMzUgLTUxKSI+PHBhdGggZD0iTTI2My41MDYgNTFDMjY0LjcxNyA1MSAyNjUuODEzIDUxLjQ4MzcgMjY2LjYwNiA1Mi4yNjU4TDI2Ny4wNTIgNTIuNzk4NyAyNjcuNTM5IDUzLjYyODMgMjkwLjE4NSA5Mi4xODMxIDI5MC41NDUgOTIuNzk1IDI5MC42NTYgOTIuOTk2QzI5MC44NzcgOTMuNTEzIDI5MSA5NC4wODE1IDI5MSA5NC42NzgyIDI5MSA5Ny4wNjUxIDI4OS4wMzggOTkgMjg2LjYxNyA5OUwyNDAuMzgzIDk5QzIzNy45NjMgOTkgMjM2IDk3LjA2NTEgMjM2IDk0LjY3ODIgMjM2IDk0LjM3OTkgMjM2LjAzMSA5NC4wODg2IDIzNi4wODkgOTMuODA3MkwyMzYuMzM4IDkzLjAxNjIgMjM2Ljg1OCA5Mi4xMzE0IDI1OS40NzMgNTMuNjI5NCAyNTkuOTYxIDUyLjc5ODUgMjYwLjQwNyA1Mi4yNjU4QzI2MS4yIDUxLjQ4MzcgMjYyLjI5NiA1MSAyNjMuNTA2IDUxWk0yNjMuNTg2IDY2LjAxODNDMjYwLjczNyA2Ni4wMTgzIDI1OS4zMTMgNjcuMTI0NSAyNTkuMzEzIDY5LjMzNyAyNTkuMzEzIDY5LjYxMDIgMjU5LjMzMiA2OS44NjA4IDI1OS4zNzEgNzAuMDg4N0wyNjEuNzk1IDg0LjAxNjEgMjY1LjM4IDg0LjAxNjEgMjY3LjgyMSA2OS43NDc1QzI2Ny44NiA2OS43MzA5IDI2Ny44NzkgNjkuNTg3NyAyNjcuODc5IDY5LjMxNzkgMjY3Ljg3OSA2Ny4xMTgyIDI2Ni40NDggNjYuMDE4MyAyNjMuNTg2IDY2LjAxODNaTTI2My41NzYgODYuMDU0N0MyNjEuMDQ5IDg2LjA1NDcgMjU5Ljc4NiA4Ny4zMDA1IDI1OS43ODYgODkuNzkyMSAyNTkuNzg2IDkyLjI4MzcgMjYxLjA0OSA5My41Mjk1IDI2My41NzYgOTMuNTI5NSAyNjYuMTE2IDkzLjUyOTUgMjY3LjM4NyA5Mi4yODM3IDI2Ny4zODcgODkuNzkyMSAyNjcuMzg3IDg3LjMwMDUgMjY2LjExNiA4Ni4wNTQ3IDI2My41NzYgODYuMDU0N1oiIGZpbGw9IiNGRkU1MDAiIGZpbGwtcnVsZT0iZXZlbm9kZCIvPjwvZz48L3N2Zz4=) no-repeat 1rem/1.8rem, #b32121;
+    padding: 1rem 1rem 1rem 3.7rem;
+    color: white;
+}
+
+    .blazor-error-boundary::after {
+        content: "An error has occurred."
+    }
+
+.darker-border-checkbox.form-check-input {
+    border-color: #929292;
+}
+
+.form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
+    color: var(--bs-secondary-color);
+    text-align: end;
+}
+
+.form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
+    text-align: start;
+}
+/* Actions in the sidebar footer (change password, sign out, colour mode) look like sidebar items. */
+.sidebar-footer-actions {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.sidebar-action {
+    display: flex;
+    align-items: center;
+    gap: var(--hx-sidebar-item-content-gap);
+    width: 100%;
+    margin: var(--hx-sidebar-item-margin);
+    padding: var(--hx-sidebar-item-padding);
+    border: 0;
+    border-radius: var(--hx-sidebar-item-border-radius);
+    background: none;
+    color: var(--hx-sidebar-item-color);
+    font-size: var(--hx-sidebar-item-font-size);
+    text-align: start;
+    text-decoration: none;
+}
+
+.sidebar-action:hover {
+    background-color: rgba(var(--hx-sidebar-item-hover-background-color), var(--hx-sidebar-item-hover-background-opacity));
+    color: var(--hx-sidebar-item-hover-color);
+}
+
+.sidebar-action .sidebar-action-icon {
+    color: var(--hx-sidebar-item-icon-color);
+}
+
+.sidebar-action:hover .sidebar-action-icon {
+    color: var(--hx-sidebar-item-hover-icon-color);
+}
+
+/* Monospaced values: Message-IDs, MICs, AS2 names. */
+.a24-code {
+    font-family: SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 0.85em;
+    word-break: break-all;
+}

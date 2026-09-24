@@ -1,0 +1,162 @@
+@page "/Outgoing"
+@rendermode InteractiveServer
+@using Havit.Collections
+@using AS24Net.DataLayer.Filters
+@using AS24Net.Domain
+<style>
+    .scrollable-table-container {
+        overflow: auto;
+        height: calc(100vh - 160px);
+    }
+</style>
+
+<HxModal @ref="newModal" Title="New message" ShowCloseButton="true" Size="ModalSize.Large" OnClosed="HandleNewClosed">
+    <BodyTemplate>
+        <HxInputFile @ref="inputFileComponent"
+                     Label="File"
+                     Hint="Uploaded to the outbox directory right after it is selected."
+                     UploadUrl="/upload/outbox"
+                     OnChange="HandleFileSelected"
+                     OnProgress="HandleUploadProgress"
+                     OnFileUploaded="HandleFileUploaded"
+                     Multiple="false"
+                     MaxFileSize="MaxUploadFileSize" />
+        @if (uploadProgress is not null)
+        {
+            <HxProgress CssClass="mb-3" Height="5">
+                <HxProgressBar Value="@uploadProgress.Value" />
+            </HxProgress>
+        }
+
+        <HxInputText Label="File path" Hint="Filled in by the upload, or the path of a file on the server." @bind-Value="filePath" />
+        <HxInputText Label="File name" Hint="Sent to the partner in Content-Disposition." @bind-Value="fileName" />
+        <HxSelect TItem="Partner" TValue="int?" Label="Partner" Data="partners" @bind-Value="partnerId" @bind-Value:after="HandlePartnerChanged"
+                  TextSelector="@(p => $"{p.Name} ({p.As2Id})")" ValueSelector="@(p => (int?)p.Id)" Nullable="true" NullText="-select-" />
+        <HxSelect TItem="Identity" TValue="int?" Label="From identity" Data="identities" @bind-Value="identityId"
+                  TextSelector="@(i => $"{i.Name} ({i.As2Id})")" ValueSelector="@(i => (int?)i.Id)" Nullable="true" NullText="-default of the partner-" />
+        <HxInputText Label="Content type" Hint="Media type of the payload, e.g. application/edifact, application/xml." @bind-Value="contentType" />
+        <HxInputText Label="Subject" @bind-Value="subject" />
+    </BodyTemplate>
+    <FooterTemplate>
+        <HxButton Text="Queue" Color="ThemeColor.Primary" Icon="BootstrapIcon.Send" Enabled="@(uploadProgress is null)" OnClick="HandleQueueAsync" />
+    </FooterTemplate>
+</HxModal>
+
+<HxModal @ref="detailModal" Title="@selected?.FileName" Size="ModalSize.Large" ShowCloseButton="true">
+    <BodyTemplate>
+        @if (selected is not null)
+        {
+            <dl class="row mb-0">
+                @Row("Message-ID", selected.MessageId, code: true)
+                <dt class="col-sm-3">State</dt><dd class="col-sm-9"><HxBadge Color="@StatusColor(selected.Status)">@selected.Status</HxBadge></dd>
+                @Row("Partner", $"{selected.Partner?.Name} ({selected.Partner?.As2Id})")
+                @Row("From", selected.Identity?.As2Id)
+                @Row("Content type", selected.ContentType)
+                @Row("Size", $"{selected.Size:N0} bytes")
+                @Row("Subject", selected.Subject)
+                @Row("Reference", selected.Reference)
+                @Row("Queued", selected.Created.ToString("G"))
+                @Row("Sent", selected.SentDate?.ToString("G"))
+                @Row("Security", Security(selected))
+                @Row("MDN", selected.MdnMode.ToString() + (selected.MdnSigned ? ", signed" : ""))
+                @Row("Our MIC", selected.Mic, code: true)
+                @Row("MIC in the MDN", selected.ReceivedMic, code: true)
+                @Row("Disposition", selected.MdnDisposition)
+                @Row("Delivered", selected.DeliveredDate?.ToString("G"))
+                @Row("Retries", selected.RetryCount == 0 ? null : selected.RetryCount.ToString())
+                @Row("Next retry", selected.Status == OutgoingStatus.Error ? selected.NextRetry.ToString("G") : null)
+                @Row("Webhook", selected.WebhookUrl)
+                @Row("File", selected.FilePath, code: true)
+            </dl>
+            @if (!string.IsNullOrEmpty(selected.LastError))
+            {
+                <HxAlert Color="@(selected.Status == OutgoingStatus.Delivered ? ThemeColor.Warning : ThemeColor.Danger)" CssClass="mt-3 small">@selected.LastError</HxAlert>
+            }
+            @if (!string.IsNullOrEmpty(selected.MdnText))
+            {
+                <pre class="bg-body-tertiary p-2 mt-3 small" style="white-space: pre-wrap;">@selected.MdnText</pre>
+            }
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        @if (selected is not null)
+        {
+            <a class="btn btn-secondary" href="@($"outgoing/{selected.Id}/download")">Download</a>
+            <HxButton Text="Send again" Color="ThemeColor.Primary" Icon="BootstrapIcon.ArrowRepeat" OnClick="() => HandleRequeueAsync(selected)" />
+        }
+    </FooterTemplate>
+</HxModal>
+
+<HxListLayout Title="Outgoing messages" TFilterModel="OutgoingMessageFilter"
+              @bind-FilterModel="filterModel"
+              @bind-FilterModel:after="gridComponent.RefreshDataAsync">
+    <CommandsTemplate>
+        <HxButton Text="New message" Color="ThemeColor.Primary" Icon="BootstrapIcon.PlusLg" OnClick="() => ShowNewAsync(null)" />
+        <HxButton Text="Send now" Color="ThemeColor.Secondary" Icon="BootstrapIcon.Send" OnClick="HandleSendNow" />
+        <HxButton Text="Refresh" Color="ThemeColor.Secondary" Icon="BootstrapIcon.ArrowClockwise" OnClick="() => gridComponent.RefreshDataAsync()" />
+    </CommandsTemplate>
+    <FilterTemplate Context="filterContext">
+        <HxInputText Label="File name or Message-ID" @bind-Value="filterContext.Name" />
+        <HxInputText Label="Partner" Hint="Name or AS2 name" @bind-Value="filterContext.Partner" />
+        <HxSelect TItem="OutgoingStatus" TValue="OutgoingStatus?" Label="State" Data="statuses"
+                  @bind-Value="filterContext.Status" ValueSelector="@(s => (OutgoingStatus?)s)" Nullable="true" NullText="All" />
+        <HxInputText Label="Reference" @bind-Value="filterContext.Reference" />
+        <HxInputDate TValue="DateTime?" Label="From" @bind-Value="filterContext.From" />
+        <HxInputDate TValue="DateTime?" Label="To" @bind-Value="filterContext.To" />
+    </FilterTemplate>
+    <DataTemplate>
+        <HxGrid @ref="gridComponent"
+                ContentNavigationMode="GridContentNavigationMode.Pagination"
+                PageSize="100"
+                TableContainerCssClass="scrollable-table-container"
+                HeaderRowCssClass="sticky-top"
+                TItem="OutgoingMessage"
+                DataProvider="GetGridData"
+                SelectedDataItem="selected"
+                SelectedDataItemChanged="HandleSelectedAsync"
+                Responsive="true"
+                PreserveSelection="false">
+            <Columns>
+                <HxGridColumn HeaderText="Queued" ItemTextSelector="@(m => m.Created.ToString("g"))" SortKeySelector="m => m.Created"
+                              IsDefaultSortColumn="true" SortDirection="SortDirection.Descending" ItemCssClass="text-nowrap" />
+                <HxGridColumn HeaderText="File" ItemTextSelector="@(m => m.FileName)" SortKeySelector="m => m.FileName" />
+                <HxGridColumn HeaderText="Partner" ItemTextSelector="@(m => m.Partner.Name)" SortKeySelector="m => m.Partner.Name" />
+                <HxGridColumn HeaderText="From" ItemTextSelector="@(m => m.Identity.As2Id)" SortKeySelector="m => m.Identity.As2Id" ItemCssClass="a24-code" />
+                <HxGridColumn HeaderText="Size" ItemTextSelector="@(m => m.Size.ToString("N0"))" SortKeySelector="m => m.Size" ItemCssClass="text-end" HeaderCssClass="text-end" />
+                <HxGridColumn HeaderText="State" SortKeySelector="m => m.Status">
+                    <ItemTemplate Context="m">
+                        <HxBadge Color="@StatusColor(m.Status)">@m.Status</HxBadge>
+                        @if (m.Status == OutgoingStatus.Error)
+                        {
+                            <span class="ms-2 small">retry @m.RetryCount at @m.NextRetry.ToString("g")</span>
+                        }
+                    </ItemTemplate>
+                </HxGridColumn>
+                <HxGridColumn HeaderText="Sent" ItemTextSelector="@(m => m.SentDate?.ToString("g"))" SortKeySelector="m => m.SentDate" ItemCssClass="text-nowrap" />
+                <HxGridColumn HeaderText="Delivered (MDN)" ItemTextSelector="@(m => m.DeliveredDate?.ToString("g"))" SortKeySelector="m => m.DeliveredDate" ItemCssClass="text-nowrap" />
+                <HxGridColumn HeaderText="Last error" ItemTextSelector="@(m => m.LastError)" ItemCssClass="text-danger small" />
+
+                <HxContextMenuGridColumn Context="message">
+                    <HxContextMenu>
+                        <HxContextMenuItem Text="Detail" Icon="BootstrapIcon.InfoCircle" OnClick="async () => await HandleSelectedAsync(message)" />
+                        <HxContextMenuItem Text="Send again" Icon="BootstrapIcon.ArrowRepeat" OnClick="async () => await HandleRequeueAsync(message)"
+                                           ConfirmationQuestion="Put the message back into the queue?" />
+                        <HxContextMenuItem Text="Delete" Icon="BootstrapIcon.Trash" OnClick="async () => await HandleDeleteAsync(message)"
+                                           ConfirmationQuestion="@($"Delete message {message.FileName}?")" />
+                    </HxContextMenu>
+                </HxContextMenuGridColumn>
+            </Columns>
+        </HxGrid>
+    </DataTemplate>
+</HxListLayout>
+
+@code {
+    private static RenderFragment Row(string label, string? value, bool code = false) => __builder =>
+    {
+        if (!string.IsNullOrEmpty(value))
+        {
+            <dt class="col-sm-3">@label</dt>
+            <dd class="col-sm-9 @(code ? "a24-code" : "")">@value</dd>
+        }
+    };
+}

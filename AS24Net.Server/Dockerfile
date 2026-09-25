@@ -15,6 +15,7 @@ RUN dotnet restore "AS24Net.Server/AS24Net.Server.csproj"
 COPY . .
 RUN dotnet publish "AS24Net.Server/AS24Net.Server.csproj" -c $BUILD_CONFIGURATION -o /app/publish \
         /p:UseAppHost=false --no-restore \
+    && test -f /app/publish/wwwroot/_framework/blazor.web.js \
     && mkdir -p /app/data
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final

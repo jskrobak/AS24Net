@@ -4,6 +4,9 @@
         <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
         <!-- Secrets of the development machine (dotnet user-secrets), stored in the profile of the user. -->
         <UserSecretsId>3bd779e3-1eec-4d9c-93d2-b3887caa91c0</UserSecretsId>
+        <!-- The SDK restores the package with _framework/blazor.web.js only when it sees .razor files, which the restore
+             of the Dockerfile, done with the project files alone, does not: without this the image has no Blazor. -->
+        <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
     </PropertyGroup>
 
     <ItemGroup>

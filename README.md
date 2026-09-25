@@ -107,6 +107,7 @@ signed and unsigned MDNs (see *Tests*).
 | `Webhooks:AllowPrivateNetworks` | Allow webhook URLs in private and loopback networks (default `false`) |
 | `Webhooks:RetryDelaysSeconds` | Delays before retrying a failed webhook call (default `5,30,120`) |
 | `Shadow:Enabled` | Shadow mode: process a mirror of the production traffic and send nothing, see *Shadow mode* (default `false`) |
+| `As2:AdditionalPaths` | More paths of the AS2 endpoint besides `/as2`, e.g. `/receiver.aspx,/mdn.aspx` of a replaced system, see *AS2 endpoint* |
 | `Hooks:*` | Scripts run on events, see *Hooks* |
 
 Runtime settings (public URL of the AS2 endpoint, directories, send interval, parallel transfers, retries, largest
@@ -323,6 +324,21 @@ A message that cannot be processed gets an MDN with `processed/error:` and the r
 `unknown-trading-partner`, `unexpected-processing-error`) and is kept in *Received* with the error. Messages larger
 than *Largest message accepted* are refused with HTTP 413. An asynchronous MDN of a message whose signature was not
 verified is posted only to the host of the partner's URL.
+
+### The URLs of a replaced system
+
+When AS24Net replaces another AS2 server, partners can keep posting to its URLs: `As2:AdditionalPaths` gives the
+endpoint more paths, each of them working exactly as `/as2` (messages and asynchronous MDNs alike, anonymous, not
+redirected to HTTPS). Paths are compared without regard to case, so `/receiver.aspx` serves `/Receiver.aspx` too.
+
+```bash
+docker run ... -e As2__AdditionalPaths=/receiver.aspx,/mdn.aspx ghcr.io/jskrobak/as24net:latest
+```
+
+or as a list, `As2__AdditionalPaths__0=/receiver.aspx` and `As2__AdditionalPaths__1=/mdn.aspx`, or in
+`appsettings.json` as `"As2": { "AdditionalPaths": [ "/receiver.aspx", "/mdn.aspx" ] }`. The log names all the paths
+at the start. A reverse proxy in front of the server needs no rewrite then; one that rewrites anyway has to pass the
+request on (`proxy_pass`), never redirect it: AS2 software does not follow a redirect of a `POST`.
 
 ## Health checks
 

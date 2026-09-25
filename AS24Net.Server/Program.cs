@@ -225,6 +225,11 @@ using (var scope = app.Services.CreateScope())
     await scope.ServiceProvider.GetRequiredService<SelfSignedCertificateService>().EnsureCertificateAsync();
 }
 
+// The AS2 endpoint and its aliases for the URLs of a replaced system (As2:AdditionalPaths).
+var as2Paths = As2EndpointPaths.Get(app.Configuration);
+if (as2Paths.Count > 1)
+    app.Logger.LogInformation("AS2 endpoint at {Paths}", string.Join(", ", as2Paths));
+
 app.UseForwardedHeaders();
 app.UseResponseCompression();
 
@@ -235,7 +240,8 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
     // Partners post to the AS2 endpoint over plain HTTP too (the messages are secured by S/MIME) and do not follow
     // a redirect, neither do the probes of the orchestrator.
-    app.UseWhen(context => !context.Request.Path.StartsWithSegments("/health") && !context.Request.Path.StartsWithSegments("/as2"),
+    app.UseWhen(context => !context.Request.Path.StartsWithSegments("/health")
+                           && !as2Paths.Any(path => context.Request.Path.StartsWithSegments(path)),
         branch => branch.UseHttpsRedirection());
 }
 
@@ -249,7 +255,7 @@ app.UseAntiforgery();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-app.MapAs2();
+app.MapAs2(as2Paths);
 app.MapApi();
 app.MapHealth();
 app.MapMonitoring();

@@ -6,24 +6,26 @@ using AS24Net.Services.As2;
 namespace AS24Net.Server.Api;
 
 /// <summary>
-/// The AS2 endpoint (<c>POST /as2</c>) partners send messages and asynchronous MDNs to. It is public: partners are
-/// recognised by their AS2 name and authenticated by the signatures of their messages.
+/// The AS2 endpoint (<c>POST /as2</c> and the aliases of <c>As2:AdditionalPaths</c>, see <see cref="As2EndpointPaths"/>)
+/// partners send messages and asynchronous MDNs to. It is public: partners are recognised by their AS2 name and
+/// authenticated by the signatures of their messages.
 /// </summary>
 public static class As2Endpoints
 {
-    public const string Path = "/as2";
-
-    public static void MapAs2(this WebApplication app)
+    public static void MapAs2(this WebApplication app, IReadOnlyList<string> paths)
     {
-        app.MapPost(Path, HandleAsync)
-            .AllowAnonymous()
-            .DisableAntiforgery()
-            .ExcludeFromDescription();
+        foreach (var path in paths)
+        {
+            app.MapPost(path, HandleAsync)
+                .AllowAnonymous()
+                .DisableAntiforgery()
+                .ExcludeFromDescription();
 
-        // A partner or a person checking the address gets an answer instead of an error page.
-        app.MapGet(Path, () => Results.Text($"{As2Headers.Product} AS2 endpoint: partners POST AS2 messages and MDNs here.\n"))
-            .AllowAnonymous()
-            .ExcludeFromDescription();
+            // A partner or a person checking the address gets an answer instead of an error page.
+            app.MapGet(path, () => Results.Text($"{As2Headers.Product} AS2 endpoint: partners POST AS2 messages and MDNs here.\n"))
+                .AllowAnonymous()
+                .ExcludeFromDescription();
+        }
     }
 
     private static async Task HandleAsync(HttpContext context, As2InboundService inbound, GlobalSettingsService settingsService,

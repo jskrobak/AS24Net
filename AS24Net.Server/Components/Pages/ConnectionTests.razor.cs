@@ -36,8 +36,15 @@ public partial class ConnectionTests : ComponentBase, IDisposable
 
     private void Start(IReadOnlyList<Partner> selected)
     {
-        if (!Tests.Start(selected.Select(p => p.Id).ToList(), identityId))
-            Messenger.AddWarning("Connection tests are running already.");
+        try
+        {
+            if (!Tests.Start(selected.Select(p => p.Id).ToList(), identityId))
+                Messenger.AddWarning("Connection tests are running already.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Messenger.AddError(ex.Message);
+        }
     }
 
     internal static ThemeColor ResultColor(ConnectionTestResult result) =>

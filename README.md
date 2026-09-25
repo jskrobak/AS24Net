@@ -40,6 +40,7 @@ HTTP instead of OFTP2.
   changes and stuck messages, shown on the dashboard and reported by webhook
 - The send queue in numbers per partner for monitoring, with a Zabbix template
 - Retention: old data removed every night and written to compressed archive files first, nothing unfinished touched
+- Shadow mode, to process a mirror of the production traffic before switching over, without sending anything
 - A development setup with two stations that are each other's partner on one server, to see a message go the whole
   way at once
 
@@ -105,6 +106,7 @@ signed and unsigned MDNs (see *Tests*).
 | `Webhooks:EventsUrl`, `Webhooks:EventsSecret` | Webhook called on every message and certificate event (see *Webhooks*) |
 | `Webhooks:AllowPrivateNetworks` | Allow webhook URLs in private and loopback networks (default `false`) |
 | `Webhooks:RetryDelaysSeconds` | Delays before retrying a failed webhook call (default `5,30,120`) |
+| `Shadow:Enabled` | Shadow mode: process a mirror of the production traffic and send nothing, see *Shadow mode* (default `false`) |
 | `Hooks:*` | Scripts run on events, see *Hooks* |
 
 Runtime settings (public URL of the AS2 endpoint, directories, send interval, parallel transfers, retries, largest
@@ -679,6 +681,35 @@ is true when it got through and the configuration has no problem.
    behind the same server is another partner with the same connection.
 7. *Partners → Test connection*: check that the partner can be reached and nothing is missing.
 8. *Messages → Outgoing*: send a first message and watch it turn `Delivered` with the MDN.
+
+## Shadow mode
+
+Before AS24Net replaces a production AS2 server it can receive a copy of the real traffic of the partners and
+process it fully, while the partners keep talking only to production:
+
+1. The reverse proxy of production mirrors the messages of the partners to AS24Net ([`samples/shadow/production-nginx.conf`](samples/shadow/production-nginx.conf)):
+   the partner gets the answer of production only, nginx discards the one of AS24Net. The mirror removes
+   `Receipt-Delivery-Option`, so AS24Net answers with a synchronous MDN and never learns where to post an asynchronous one.
+2. AS24Net runs with `Shadow:Enabled=true`. Messages are received, decrypted, verified and stored and MDNs are
+   built, but nothing leaves the server:
+
+   | What | In shadow mode |
+   |---|---|
+   | Asynchronous MDNs | built (so that signing them is tried) and not posted; the message shows the MDN as *Suppressed* and the log *MdnSuppressed*. They are not posted later either, when shadow mode is turned off. |
+   | Send queue | nothing can be queued (the UI and `POST /api/v1/messages` refuse it), nothing queued before is sent |
+   | Connection tests | refused: partners are not to see the server at all |
+   | Hooks and webhooks | not run: the systems behind production get the files from production, not twice |
+
+   A banner in the administration, a warning in the log and `shadowMode` in `GET /api/v1/status` show the mode.
+3. [`samples/shadow/docker-compose.yml`](samples/shadow/docker-compose.yml) puts AS24Net and its database on a Docker
+   network without a route out of the host (`internal: true`); a gateway on both networks lets the mirror and the
+   administration in. A partner cannot be reached even if the first two barriers failed. Signing in with Entra ID
+   needs the internet, so the administration is used with a password there.
+
+AS24Net needs the certificate of the production identity with its private key and the partners with their AS2
+names and certificates; a message it cannot open is refused and does no harm, but tests nothing. The transfer log
+and *Messages → Received* then show how AS24Net handled every message of every partner, and the MIC in its
+MDN can be compared with the one production sent.
 
 ## Tests
 

@@ -159,6 +159,15 @@ public class As2EventNotifier(
             message.Partner, message.As2From, e => Describe(e, message));
     }
 
+    /// <summary>An asynchronous MDN that was built and not posted, as the server runs in shadow mode.</summary>
+    public void MdnSuppressed(ReceivedMessage message, string? error)
+    {
+        Record(TransferEventCategory.Mdn, TransferEventType.MdnSuppressed, error is null ? TransferEventLevel.Information : TransferEventLevel.Warning,
+            $"Asynchronous MDN for {message.MessageId} not posted to {message.MdnUrl} (shadow mode): " +
+            (error is null ? message.MdnDisposition ?? "processed" : $"it could not be built: {error}"),
+            message.Partner, message.As2From, e => Describe(e, message));
+    }
+
     /// <summary>
     /// A scheduled certificate was put in place in the connection, for all its partners: <c>partnerName</c> is the
     /// name of the connection and <c>partnerAs2Id</c> the AS2 names of its partners, separated by commas.

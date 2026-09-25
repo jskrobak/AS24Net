@@ -173,6 +173,7 @@ builder.Services.AddScoped<CertificateChangeService>();
 
 builder.AddBlazorCookies();
 
+builder.Services.AddSingleton<ShadowMode>();
 builder.Services.AddSingleton<As2HttpClientProvider>();
 builder.Services.AddSingleton<As2EventNotifier>();
 builder.Services.AddSingleton<ConnectionTestService>();
@@ -203,6 +204,10 @@ builder.Services.AddResponseCompression(opts =>
 });
 
 var app = builder.Build();
+
+if (app.Services.GetRequiredService<ShadowMode>().Enabled)
+    app.Logger.LogWarning("Shadow mode: messages are received and processed, but nothing is sent to partners " +
+                          "(no asynchronous MDNs, no send queue, no connection tests) and no hooks or webhooks run");
 
 // Create or update the database schema, the default user admin/admin on an empty database, an own certificate
 // when there is none and the development loopback stations (SeedLoopback).

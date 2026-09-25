@@ -46,6 +46,7 @@ public partial class Received : ComponentBase
         MdnDeliveryStatus.SentAsync => $"posted at {m.MdnSentDate:G}{(m.MdnSignedRequested ? ", signed" : "")}",
         MdnDeliveryStatus.Retrying => $"posting failed {m.MdnRetryCount} time(s), next attempt at {m.MdnNextRetry:G}",
         MdnDeliveryStatus.Failed => $"could not be posted ({m.MdnRetryCount} attempts)",
+        MdnDeliveryStatus.Suppressed => $"not posted to {m.MdnUrl}: shadow mode",
         _ => "waiting to be posted",
     };
 

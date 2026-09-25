@@ -38,6 +38,7 @@ public enum TransferEventType
     DuplicateReceived,
     MdnSent,
     MdnSendFailed,
+    MdnSuppressed,
     MdnReceived,
     MdnInvalid,
     MdnTimedOut,

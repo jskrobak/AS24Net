@@ -21,6 +21,7 @@ public class As2SendService(
     GlobalSettingsService globalSettingsService,
     ITimeService timeService,
     As2EventNotifier notifier,
+    ShadowMode shadowMode,
     ILogger<As2SendService> logger) : BackgroundService
 {
     private readonly SemaphoreSlim _trigger = new(0, 1);
@@ -79,7 +80,12 @@ public class As2SendService(
             while (!stoppingToken.IsCancellationRequested)
             {
                 var settings = await globalSettingsService.GetGlobalSettingsAsync();
-                if (!IsPaused)
+                if (shadowMode.Enabled)
+                {
+                    // Nothing can be queued in shadow mode, and nothing queued before is sent.
+                    LastRun = timeService.GetCurrentTime();
+                }
+                else if (!IsPaused)
                 {
                     try
                     {

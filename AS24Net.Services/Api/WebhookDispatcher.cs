@@ -99,6 +99,13 @@ public sealed class WebhookDispatcher(
 
     public void Dispatch(string url, string? secret, WebhookPayload payload)
     {
+        // The systems behind production get their webhooks from production.
+        if (ShadowMode.IsEnabled(configuration))
+        {
+            logger.LogDebug("Shadow mode: webhook {Event} to {Url} not called", payload.Event, url);
+            return;
+        }
+
         // A full queue drops the call and reports it (MonitoredQueue).
         _queue.Writer.TryWrite((url, secret, payload));
     }

@@ -26,6 +26,8 @@ services:
     environment:
       ConnectionStrings__AS24Net: Host=postgres;Database=as24net;Username=as24net;Password=as24net
       Certificates__GenerateCertificate: "false"
+      # AS24NET_SHADOW=true runs AS24Net in shadow mode.
+      Shadow__Enabled: ${AS24NET_SHADOW:-false}
     ports:
       - "18080:8080"
     # The receiver of the outbound load test runs on the host.

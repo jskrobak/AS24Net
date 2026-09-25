@@ -33,6 +33,9 @@ public enum MdnDeliveryStatus
 
     /// <summary>Could not be posted within the retries.</summary>
     Failed,
+
+    /// <summary>Built but not posted: the server runs in shadow mode.</summary>
+    Suppressed,
 }
 
 /// <summary>A message received from a partner, including those that failed (for their MDN and the history).</summary>

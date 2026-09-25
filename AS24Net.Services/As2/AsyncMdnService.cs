@@ -12,7 +12,8 @@ using AS24Net.Services.Events;
 namespace AS24Net.Services.As2;
 
 /// <summary>
-/// Posts asynchronous MDNs to the URLs partners asked for (Receipt-Delivery-Option), with retries and back-off.
+/// Posts asynchronous MDNs to the URLs partners asked for (Receipt-Delivery-Option), with retries and back-off. In
+/// shadow mode the MDNs are built and not posted.
 /// </summary>
 public class AsyncMdnService(
     IServiceScopeFactory serviceScopeFactory,
@@ -20,6 +21,7 @@ public class AsyncMdnService(
     ITimeService timeService,
     As2HttpClientProvider httpClients,
     As2EventNotifier notifier,
+    ShadowMode shadowMode,
     ILogger<AsyncMdnService> logger) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(30);
@@ -78,6 +80,12 @@ public class AsyncMdnService(
         {
             var identity = message.IdentityId is { } identityId ? await identities.FindWithRefsAsync(identityId, cancellationToken) : null;
             var partner = message.PartnerId is { } partnerId ? await partners.FindWithRefsAsync(partnerId, cancellationToken) : null;
+            if (shadowMode.Enabled)
+            {
+                await SuppressAsync(message, identity, unitOfWork, cancellationToken);
+                continue;
+            }
+
             string? error = null;
             try
             {
@@ -131,6 +139,30 @@ public class AsyncMdnService(
             await unitOfWork.CommitAsync(cancellationToken);
             notifier.MdnSent(message, async: true, error, willRetry);
         }
+    }
+
+    /// <summary>
+    /// Shadow mode: the MDN is built as for real, so that signing it is tried, and not posted. The message is not
+    /// picked up again, even when shadow mode is turned off later.
+    /// </summary>
+    private async Task SuppressAsync(ReceivedMessage message, Identity? identity, IUnitOfWork unitOfWork, CancellationToken cancellationToken)
+    {
+        string? error = null;
+        try
+        {
+            BuildMdn(message, identity, message.Status == ReceivedStatus.Failed ? message.Error : null);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+
+        message.MdnStatus = MdnDeliveryStatus.Suppressed;
+        message.MdnLastError = error is null ? null : MdnEvaluation.Truncate(error, 2000);
+        unitOfWork.AddForUpdate(message);
+        await unitOfWork.CommitAsync(cancellationToken);
+        logger.LogInformation("Shadow mode: the asynchronous MDN for {MessageId} is not posted to {Url}", message.MessageId, message.MdnUrl);
+        notifier.MdnSuppressed(message, error);
     }
 
     internal static bool SameHost(string? url, string partnerUrl) =>

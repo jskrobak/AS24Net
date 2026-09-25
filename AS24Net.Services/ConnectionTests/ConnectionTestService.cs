@@ -71,7 +71,8 @@ public sealed class ConnectionTestService(
     As2HttpClientProvider httpClients,
     ITransferEventLog transferEvents,
     ITimeService timeService,
-    ILogger<ConnectionTestService> logger)
+    ILogger<ConnectionTestService> logger,
+    ShadowMode? shadowMode = null)
 {
     public static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(30);
 
@@ -103,6 +104,10 @@ public sealed class ConnectionTestService(
     /// </summary>
     public bool Start(IReadOnlyList<int> partnerIds, int? identityId)
     {
+        // Partners are not to see the shadow server at all, not even its connection tests.
+        if (shadowMode?.Enabled == true)
+            throw new InvalidOperationException(ShadowMode.Reason);
+
         CancellationTokenSource run;
         lock (_lock)
         {
@@ -156,6 +161,9 @@ public sealed class ConnectionTestService(
     /// <param name="identityId">The identity to test as; without it the default identity of the partner, else the first one.</param>
     public async Task<ConnectionTestResult> TestAsync(int partnerId, int? identityId, CancellationToken cancellationToken = default)
     {
+        if (shadowMode?.Enabled == true)
+            throw new InvalidOperationException(ShadowMode.Reason);
+
         Current = partnerId;
         Changed?.Invoke();
         try

@@ -9,10 +9,13 @@ namespace AS24Net.Services.Health;
 /// has paused it, since messages wait for as long.
 /// </summary>
 public sealed class SendServiceHealthCheck(As2SendService sendService, GlobalSettingsService settingsService,
-    ITimeService timeService) : IHealthCheck
+    ITimeService timeService, ShadowMode shadowMode) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
+        if (shadowMode.Enabled)
+            return HealthCheckResult.Healthy("Shadow mode: nothing is sent to partners.");
+
         var settings = await settingsService.GetGlobalSettingsAsync();
         return Evaluate(sendService.IsRunning, sendService.IsPaused, sendService.Started, sendService.LastRun,
             sendService.ActiveTransfers, settings.SendIntervalSeconds, timeService.GetCurrentTime());

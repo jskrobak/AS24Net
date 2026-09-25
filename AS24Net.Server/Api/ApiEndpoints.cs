@@ -440,7 +440,7 @@ public static class ApiEndpoints
             })
             .WithSummary("Reads the transfer log.");
 
-        api.MapGet("/status", async (As2SendService sendService, HealthMonitor health,
+        api.MapGet("/status", async (As2SendService sendService, HealthMonitor health, ShadowMode shadowMode,
                 IOutgoingMessageRepository outgoing, IReceivedMessageRepository received, CancellationToken cancellationToken) =>
             {
                 var waiting = await outgoing.GetListAsync(new OutgoingMessageFilter { Status = OutgoingStatus.New }, 0, 1, cancellationToken);
@@ -451,7 +451,7 @@ public static class ApiEndpoints
 
                 return Results.Ok(new StatusDto(sendService.IsRunning, sendService.IsPaused, sendService.LastRun, sendService.ActiveTransfers,
                     waiting.TotalCount, retrying.TotalCount, awaitingMdn.TotalCount, failed.TotalCount, toFetch.TotalCount,
-                    health.Report?.Status.ToString()));
+                    health.Report?.Status.ToString(), shadowMode.Enabled));
             })
             .WithSummary("Status of the send service and the queues.");
     }
@@ -515,4 +515,4 @@ public record TransferEventDto(int Id, DateTime Timestamp, string Category, stri
 }
 
 public record StatusDto(bool SendServiceRunning, bool SendServicePaused, DateTime? SendServiceLastRun, int ActiveTransfers,
-    int Waiting, int Retrying, int AwaitingMdn, int Failed, int MessagesToFetch, string? Health);
+    int Waiting, int Retrying, int AwaitingMdn, int Failed, int MessagesToFetch, string? Health, bool ShadowMode);

@@ -42,10 +42,15 @@ public class MessageQueueService(
     GlobalSettingsService settingsService,
     OutboxStorage outbox,
     As2SendService sendService,
+    ShadowMode shadowMode,
     ILogger<MessageQueueService> logger)
 {
     public async Task<OutgoingMessage> QueueAsync(QueueRequest request, CancellationToken cancellationToken = default)
     {
+        // Refused rather than kept: queued messages would go out once shadow mode is turned off.
+        if (shadowMode.Enabled)
+            throw new InvalidOperationException(ShadowMode.Reason);
+
         var partner = await partnerRepository.FindWithRefsAsync(request.PartnerId, cancellationToken)
                       ?? throw new InvalidOperationException($"Partner {request.PartnerId} does not exist.");
         var identity = await ResolveIdentityAsync(partner, request.IdentityId, cancellationToken);

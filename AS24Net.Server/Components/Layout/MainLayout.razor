@@ -1,4 +1,5 @@
 ﻿@inherits LayoutComponentBase
+@inject AS24Net.Services.ShadowMode Shadow
 
 <PageTitle>@_title</PageTitle>
 
@@ -6,6 +7,16 @@
     <Sidebar />
 
     <div style="min-width: 0;" class="doc-content main p-md-4 pt-0 flex-grow-1 overflow-hidden">
+        @if (Shadow.Enabled)
+        {
+            <div class="alert alert-warning d-flex align-items-center gap-2 mt-3 mt-md-0" role="alert">
+                <HxIcon Icon="BootstrapIcon.ShieldLock" />
+                <div>
+                    <strong>Shadow mode.</strong> Messages are received and processed, but nothing is sent to partners
+                    (no asynchronous MDNs, no send queue, no connection tests) and no hooks or webhooks run.
+                </div>
+            </div>
+        }
         <HxMessenger Position="ToastContainerPosition.MiddleCenter" />
         <HxMessageBoxHost />
         @Body

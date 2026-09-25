@@ -114,6 +114,13 @@ public sealed class HookRunner(IConfiguration configuration, ILogger<HookRunner>
         if (string.IsNullOrWhiteSpace(command))
             return;
 
+        // A script would hand the files to the systems behind production a second time.
+        if (ShadowMode.IsEnabled(configuration))
+        {
+            logger.LogInformation("Shadow mode: hook {Event} not run", hookEvent);
+            return;
+        }
+
         var all = new Dictionary<string, string?>(parameters)
         {
             ["event"] = hookEvent.ToString(),
@@ -131,6 +138,12 @@ public sealed class HookRunner(IConfiguration configuration, ILogger<HookRunner>
     /// </summary>
     public bool TryRunAgain(TransferEvent failedRun, out string? error)
     {
+        if (ShadowMode.IsEnabled(configuration))
+        {
+            error = ShadowMode.Reason;
+            return false;
+        }
+
         Dictionary<string, string?>? parameters = null;
         try
         {

@@ -49,6 +49,25 @@
     </BodyTemplate>
 </HxModal>
 
+<HxModal @ref="allCertificateModal" ShowCloseButton="true" Title="Certificate of all identities">
+    <BodyTemplate>
+        <p class="small text-body-secondary">
+            Every identity gets the certificate, e.g. when one certificate of the company replaces another. The decryption
+            certificate it replaces is still used for messages encrypted for it, until it is dropped on the identity.
+        </p>
+        <HxSelect TItem="Certificate" TValue="int?" Label="Certificate"
+                  Data="ownCertificates" @bind-Value="@allCertificateId"
+                  TextSelector="@(c => $"{c.Name} (valid to {c.ValidTo:d})")" ValueSelector="@(c => (int?)c.Id)"
+                  Nullable="true" NullText="-select-" />
+        <HxCheckbox Text="Signing certificate" @bind-Value="@allSigning" />
+        <HxCheckbox Text="Decryption certificate" @bind-Value="@allDecryption" />
+    </BodyTemplate>
+    <FooterTemplate>
+        <HxButton Text="Set for all identities" Color="ThemeColor.Primary" OnClick="SetCertificateForAllAsync"
+                  Enabled="@(allCertificateId is not null && (allSigning || allDecryption))" />
+    </FooterTemplate>
+</HxModal>
+
 <HxListLayout Title="Identities" TFilterModel="IdentityFilter"
               @bind-FilterModel="filterModel"
               @bind-FilterModel:after="gridComponent.RefreshDataAsync">
@@ -56,6 +75,8 @@
         <HxButton Text="New identity"
                   Color="ThemeColor.Primary"
                   Icon="BootstrapIcon.PlusLg" OnClick="HandleNewItemClicked" />
+        <HxButton Text="Certificate of all" Color="ThemeColor.Secondary" Icon="BootstrapIcon.ShieldCheck"
+                  OnClick="() => allCertificateModal.ShowAsync()" />
     </CommandsTemplate>
     <FilterTemplate Context="filterContext">
         <HxInputText Label="Name or AS2 name" @bind-Value="filterContext.Name" />

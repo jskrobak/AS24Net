@@ -66,6 +66,34 @@ public partial class Identities : ComponentBase
         await gridComponent.RefreshDataAsync();
     }
 
+    #region One certificate for all identities
+
+    private HxModal allCertificateModal = null!;
+    private int? allCertificateId;
+    private bool allSigning = true;
+    private bool allDecryption = true;
+
+    private async Task SetCertificateForAllAsync()
+    {
+        try
+        {
+            var changed = await DataService.SetCertificateForAllIdentitiesAsync(allCertificateId!.Value, allSigning, allDecryption);
+            Messenger.AddInformation(changed == 0
+                ? "All identities have the certificate already."
+                : $"The certificate is set for {changed} identit{(changed == 1 ? "y" : "ies")}.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Messenger.AddError(ex.Message);
+            return;
+        }
+
+        await gridComponent.RefreshDataAsync();
+        await allCertificateModal.HideAsync();
+    }
+
+    #endregion
+
     private async Task SaveIdentity()
     {
         try

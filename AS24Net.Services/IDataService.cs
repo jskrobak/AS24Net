@@ -43,6 +43,12 @@ public interface IDataService
     /// </param>
     Task SaveIdentityAsync(Identity identity, int? originalDecryptionCertificateId = null);
     Task DeleteIdentityAsync(Identity identity);
+
+    /// <summary>
+    /// Gives every identity the certificate for signing and/or decryption; returns how many identities changed. The
+    /// decryption certificate it replaces stays accepted, as when one identity is changed.
+    /// </summary>
+    Task<int> SetCertificateForAllIdentitiesAsync(int certificateId, bool signing, bool decryption);
     Task SaveCertificateAsync(Certificate certificate);
 
     /// <summary>Deletes a certificate that nothing uses; throws <see cref="InvalidOperationException"/> naming who does.</summary>

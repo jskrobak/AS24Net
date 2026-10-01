@@ -141,6 +141,50 @@ public class DataService(
         await unitOfWork.CommitAsync();
     }
 
+    public async Task<int> SetCertificateForAllIdentitiesAsync(int certificateId, bool signing, bool decryption)
+    {
+        var certificate = (await certificateRepository.GetAllAsync()).FirstOrDefault(c => c.Id == certificateId)
+                          ?? throw new InvalidOperationException($"Certificate {certificateId} does not exist.");
+        if (!certificate.HasPrivateKey)
+            throw new InvalidOperationException($"Certificate {certificate.Name} has no private key: it cannot sign or decrypt.");
+
+        var changed = 0;
+        foreach (var identity in await identityRepository.GetAllAsync())
+        {
+            if (!ApplyCertificate(identity, certificateId, signing, decryption))
+                continue;
+            unitOfWork.AddForUpdate(identity);
+            changed++;
+        }
+
+        await unitOfWork.CommitAsync();
+        return changed;
+    }
+
+    /// <summary>
+    /// Sets the certificate on the identity; the decryption certificate it replaces becomes the previous one, which
+    /// is still used for messages encrypted for it. Returns whether anything changed.
+    /// </summary>
+    public static bool ApplyCertificate(Identity identity, int certificateId, bool signing, bool decryption)
+    {
+        var changed = false;
+        if (signing && identity.SigningCertificateId != certificateId)
+        {
+            identity.SigningCertificateId = certificateId;
+            changed = true;
+        }
+
+        if (decryption && identity.DecryptionCertificateId != certificateId)
+        {
+            if (identity.DecryptionCertificateId is { } replaced)
+                identity.PreviousDecryptionCertificateId = replaced;
+            identity.DecryptionCertificateId = certificateId;
+            changed = true;
+        }
+
+        return changed;
+    }
+
     public async Task DeleteIdentityAsync(Identity identity)
     {
         unitOfWork.AddForDelete(identity);

@@ -116,7 +116,7 @@ public class As2InboundService(
         As2InboundMessage inbound;
         try
         {
-            inbound = As2MessageReader.Read(headers, body, As2Certificates.DecryptionCertificates(identity),
+            inbound = As2MessageReader.Read(headers, body, As2Certificates.DecryptionCertificates(identity, partner),
                 As2Certificates.SignatureCertificates(partner), partner.Connection.SignatureAlgorithm);
         }
         catch (As2ProcessingException ex)
@@ -211,7 +211,7 @@ public class As2InboundService(
             return As2Response.Text(200, "The message was received, its MDN follows asynchronously.");
         }
 
-        var mdn = AsyncMdnService.BuildMdn(record, identity, reason);
+        var mdn = AsyncMdnService.BuildMdn(record, identity, partner, reason);
         record.MdnStatus = MdnDeliveryStatus.SentSync;
         record.MdnSentDate = timeService.GetCurrentTime();
         unitOfWork.AddForInsert(record);

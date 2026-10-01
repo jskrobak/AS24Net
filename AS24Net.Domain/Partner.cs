@@ -47,6 +47,14 @@ public class Partner
     public int? DefaultIdentityId { get; set; }
     public Identity? DefaultIdentity { get; set; }
 
+    /// <summary>
+    /// Our certificate (with the private key) used for this partner instead of the one of the identity: our messages
+    /// and MDNs to it are signed with it and its messages are decrypted with it (the identity's are tried too).
+    /// For a partner that knows us by another certificate than the other partners of the same identity.
+    /// </summary>
+    public int? OwnCertificateId { get; set; }
+    public Certificate? OwnCertificate { get; set; }
+
     /// <summary>Media type of the payload when the queue item names none, e.g. application/edifact.</summary>
     [Required]
     [StringLength(100)]

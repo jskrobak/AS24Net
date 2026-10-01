@@ -137,6 +137,7 @@ A **partner** is a remote AS2 station:
 | *Default identity* | the identity we send from when a message names none |
 | *Content type* | media type of the payload when a message names none, e.g. `application/edifact`, `application/edi-x12`, `application/xml` |
 | *Subject* | subject of our messages; the file name when empty |
+| *Our certificate* | our certificate (with the private key) used for this partner instead of the identity's: our messages and MDNs to it are signed with it and its messages are decrypted with it (the identity's certificates are tried too). For a partner that knows us by another certificate than the other partners of the identity, e.g. one that has not switched to our new certificate yet |
 | *Enabled* | a disabled partner gets no messages and its messages are refused |
 
 A **connection** is the partner's server and what was agreed with it. Partners that differ only in their AS2 name
@@ -398,7 +399,7 @@ readinessProbe:
 | `database` | the database cannot be reached or migrations are missing (`Database:MigrateOnStartup=false`); its size and the largest tables in bytes are in the data |
 | `storage` | the receive or outbox directory or the data protection keys cannot be written; degraded when disk space runs low |
 | `send-service` | the service stopped or has not processed the queue for three send intervals and a minute; degraded while paused |
-| `certificates` | degraded: a certificate in use (identities, connections with an enabled partner) expired or expires within 30 days, unless a scheduled change replaces it in time |
+| `certificates` | degraded: a certificate in use (identities, connections with an enabled partner, our certificates of enabled partners) expired or expires within 30 days, unless a scheduled change replaces it in time |
 | `certificate-changes` | degraded: a scheduled change is more than 10 minutes overdue, its certificate expires before its time, or a change failed within 7 days |
 | `messages` | degraded: a message waits to be sent for more than 24 hours, failed or was not delivered in the last 24 hours, an asynchronous MDN of ours could not be posted for an hour, or a message of a partner was refused in the last 24 hours |
 | `internal-queues` | degraded: the queue of the transfer log, the webhooks or the hooks is 80 % full and about to drop items |
@@ -564,7 +565,7 @@ the path or update it, so an import can run again; a property left out (or `null
 |---|---|
 | `GET`, `POST /api/v1/certificates` | lists the stored certificates; stores one (JSON: `fileName`, `data` in base64, `password` of a PKCS#12, optional `name`), or returns the one with the same thumbprint stored already |
 | `PUT /api/v1/connections/{name}` | creates or updates a connection (JSON: `url`, `signMessages`, `signatureAlgorithm`, `encryptMessages`, `encryptionAlgorithm`, `compressMessages`, `compressBeforeSigning`, `mdnMode` (`None`, `Sync`, `Async`), `requestSignedMdn`, `mdnTimeoutMinutes`, `requireSignedMessages`, `requireEncryptedMessages`, `signatureCertificateId`, `encryptionCertificateId`, `tlsCertificateId`, `httpUserName`, `httpPassword`, `timeoutSeconds`, `contactName`, `contactEmail`) |
-| `PUT /api/v1/partners/{as2Id}` | creates or updates a partner (JSON: `name`, `description`, `connection` (its name), `enabled`, `defaultIdentity` (an AS2 name, `""` removes it), `contentType`, `subject`) |
+| `PUT /api/v1/partners/{as2Id}` | creates or updates a partner (JSON: `name`, `description`, `connection` (its name), `enabled`, `defaultIdentity` (an AS2 name, `""` removes it), `contentType`, `subject`, `ownCertificateId` (our certificate for this partner instead of the identity's, `0` removes it)) |
 | `PUT /api/v1/identities/{as2Id}` | creates or updates our identity (JSON: `name`, `description`, `email`, `signingCertificateId`, `decryptionCertificateId`) |
 
 Partners and identities are given by their name or AS2 name.

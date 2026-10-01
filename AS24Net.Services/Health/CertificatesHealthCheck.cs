@@ -8,7 +8,7 @@ namespace AS24Net.Services.Health;
 
 /// <summary>
 /// No certificate in use expired or expires within <see cref="WarningDays"/> days: ours (signing and decryption of
-/// the identities) and those of the connections to partners, unless a scheduled change replaces it before it expires.
+/// the identities, our own certificates of partners) and those of the connections to partners, unless a scheduled change replaces it before it expires.
 /// Certificates stored but not used, and those kept only for a roll-over, are left out.
 /// </summary>
 public sealed class CertificatesHealthCheck(IServiceScopeFactory serviceScopeFactory, ITimeService timeService) : IHealthCheck
@@ -45,6 +45,8 @@ public sealed class CertificatesHealthCheck(IServiceScopeFactory serviceScopeFac
             uses.Add((connection.EncryptionCertificateId, $"encryption certificate of connection {connection.Name}",
                 Replaced(PartnerCertificateUsage.Encryption, PartnerCertificateUsage.SignatureAndEncryption)));
             uses.Add((connection.TlsCertificateId, $"TLS certificate trusted for connection {connection.Name}", Replaced(PartnerCertificateUsage.Tls)));
+            foreach (var partner in connection.Partners.Where(p => p.Enabled))
+                uses.Add((partner.OwnCertificateId, $"our certificate of partner {partner.Name}", null));
         }
 
         return Evaluate(

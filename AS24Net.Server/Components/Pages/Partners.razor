@@ -38,6 +38,12 @@
                     </div>
                     <div class="col-md-6"><HxInputText Label="Content type" Hint="Media type of the payload when the message names none, e.g. application/edifact." @bind-Value="@currentPartner.ContentType" /></div>
                     <div class="col-md-6"><HxInputText Label="Subject" Hint="Subject of our messages; the file name when empty." @bind-Value="@currentPartner.Subject" /></div>
+                    <div class="col-md-6">
+                        <HxSelect TItem="Certificate" TValue="int?" Label="Our certificate"
+                                  Hint="Signs our messages and MDNs to this partner and decrypts its messages instead of the certificates of the identity, for a partner that knows us by another certificate."
+                                  Data="ownCertificates" @bind-Value="@currentPartner.OwnCertificateId"
+                                  TextSelector="@(c => $"{c.Name} (to {c.ValidTo:d})")" ValueSelector="@(c => (int?)c.Id)" Nullable="true" NullText="-the identity's-" />
+                    </div>
                     <div class="col-md-6"><HxCheckbox Label="Enabled" Text="Messages are sent to the partner and accepted from it" @bind-Value="@currentPartner.Enabled" /></div>
                 </div>
 

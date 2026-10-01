@@ -19,6 +19,7 @@ public partial class Partners : ComponentBase
     private HxModal partnerEditModal = null!;
     private List<Connection> connections = [];
     private List<Identity> identities = [];
+    private List<Certificate> ownCertificates = [];
 
     /// <summary>Opens the form of a new partner of the connection right away (from the connection's menu).</summary>
     [SupplyParameterFromQuery(Name = "connection")] public int? ConnectionQuery { get; set; }
@@ -27,6 +28,7 @@ public partial class Partners : ComponentBase
     {
         connections = await DataService.GetAllConnectionsAsync();
         identities = await DataService.GetAllIdentitiesAsync();
+        ownCertificates = (await DataService.GetAllCertificatesAsync()).Where(c => c.HasPrivateKey).ToList();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

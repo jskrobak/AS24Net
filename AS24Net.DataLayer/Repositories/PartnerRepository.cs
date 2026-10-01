@@ -57,5 +57,6 @@ public class PartnerRepository(
         .Include(p => p.Connection).ThenInclude(c => c.PreviousSignatureCertificate)
         .Include(p => p.Connection).ThenInclude(c => c.EncryptionCertificate)
         .Include(p => p.Connection).ThenInclude(c => c.TlsCertificate)
-        .Include(p => p.DefaultIdentity);
+        .Include(p => p.DefaultIdentity)
+        .Include(p => p.OwnCertificate);
 }

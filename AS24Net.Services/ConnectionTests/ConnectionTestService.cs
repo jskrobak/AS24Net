@@ -395,16 +395,20 @@ public sealed class ConnectionTestService(
         if (!partner.Enabled)
             warnings.Add("The partner is disabled: nothing is sent to it and its messages are refused.");
 
+        var ourName = partner.OwnCertificate is not null ? "Our certificate of the partner" : $"The signing certificate of identity {identity.Name}";
         if (connection.SignMessages)
-            Check(identity.SigningCertificate, $"The signing certificate of identity {identity.Name}", required: true, privateKey: true);
+            Check(As2Certificates.SigningCertificateEntity(identity, partner), ourName, required: true, privateKey: true);
         if (connection.EncryptMessages)
             Check(connection.EncryptionCertificate, "The encryption certificate of the partner", required: true);
 
         var verifies = connection.RequireSignedMessages || connection is { MdnMode: not MdnMode.None, RequestSignedMdn: true };
         Check(connection.SignatureCertificate, "The signature certificate of the partner", required: verifies);
 
-        var decryption = identity.DecryptionCertificate ?? identity.SigningCertificate;
-        Check(decryption, $"The decryption certificate of identity {identity.Name}", required: connection.RequireEncryptedMessages, privateKey: true);
+        if (partner.OwnCertificate is not null)
+            Check(partner.OwnCertificate, ourName, required: false, privateKey: true);
+        else
+            Check(identity.DecryptionCertificate ?? identity.SigningCertificate, $"The decryption certificate of identity {identity.Name}",
+                required: connection.RequireEncryptedMessages, privateKey: true);
 
         if (connection.MdnMode == MdnMode.Async)
         {

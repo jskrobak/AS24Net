@@ -165,8 +165,10 @@ public class As2Sender(
         GlobalSettings settings)
     {
         var signing = partner.Connection.SignMessages
-            ? As2Certificates.SigningCertificate(identity)
-              ?? throw new As2TransferException($"Identity {identity.Name} has no signing certificate with a private key.", retry: false)
+            ? As2Certificates.SigningCertificate(identity, partner)
+              ?? throw new As2TransferException(partner.OwnCertificate is not null
+                  ? $"Our certificate of partner {partner.Name} has no private key."
+                  : $"Identity {identity.Name} has no signing certificate with a private key.", retry: false)
             : null;
         var encryption = partner.Connection.EncryptMessages
             ? partner.Connection.EncryptionCertificate is { } certificate

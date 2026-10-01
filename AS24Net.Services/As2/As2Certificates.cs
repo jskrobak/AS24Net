@@ -19,17 +19,23 @@ public static class As2Certificates
             .ToList();
 
     /// <summary>
-    /// Our certificates a partner may have encrypted for: the decryption certificate, the one before it and the
-    /// signing certificate (partners often use the one certificate they know of us for both).
+    /// Our certificates a partner may have encrypted for: our own certificate of the partner, when it has one, then
+    /// the decryption certificate of the identity, the one before it and the signing certificate (partners often use
+    /// the one certificate they know of us for both).
     /// </summary>
-    public static List<X509Certificate2> DecryptionCertificates(Identity identity) =>
-        new[] { identity.DecryptionCertificate, identity.PreviousDecryptionCertificate, identity.SigningCertificate }
+    public static List<X509Certificate2> DecryptionCertificates(Identity identity, Partner? partner = null) =>
+        new[] { partner?.OwnCertificate, identity.DecryptionCertificate, identity.PreviousDecryptionCertificate, identity.SigningCertificate }
             .OfType<Certificate>()
             .Where(c => c.HasPrivateKey)
             .DistinctBy(c => c.Id)
             .Select(CertificateLoader.Load)
             .ToList();
 
-    public static X509Certificate2? SigningCertificate(Identity identity) =>
-        identity.SigningCertificate is { HasPrivateKey: true } certificate ? CertificateLoader.Load(certificate) : null;
+    /// <summary>The certificate our messages and MDNs to the partner are signed with: its own one, or the identity's.</summary>
+    public static X509Certificate2? SigningCertificate(Identity identity, Partner? partner = null) =>
+        SigningCertificateEntity(identity, partner) is { HasPrivateKey: true } certificate ? CertificateLoader.Load(certificate) : null;
+
+    /// <summary>The stored certificate <see cref="SigningCertificate"/> loads.</summary>
+    public static Certificate? SigningCertificateEntity(Identity identity, Partner? partner) =>
+        partner?.OwnCertificate ?? identity.SigningCertificate;
 }

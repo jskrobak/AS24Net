@@ -86,8 +86,8 @@ public static class ConfigurationEndpoints
                              "previous one is still accepted, as when it is changed in the administration. mdnMode: None, Sync or Async.");
 
         configuration.MapPut("/partners/{as2Id}", async (string as2Id, PartnerRequest request, IPartnerRepository partners,
-                IConnectionRepository connections, IIdentityRepository identities, IDataService dataService,
-                CancellationToken cancellationToken) =>
+                IConnectionRepository connections, IIdentityRepository identities, ICertificateRepository certificates,
+                IDataService dataService, CancellationToken cancellationToken) =>
             {
                 var partner = (await partners.GetAllWithConnectionAsync(cancellationToken)).FirstOrDefault(p => ApiEndpoints.Matches(p.As2Id, as2Id));
                 var created = partner is null;
@@ -123,6 +123,23 @@ public static class ConfigurationEndpoints
                     }
                 }
 
+                if (request.OwnCertificateId is { } ownCertificateId)
+                {
+                    if (ownCertificateId == 0)
+                    {
+                        partner.OwnCertificateId = null;
+                        partner.OwnCertificate = null;
+                    }
+                    else
+                    {
+                        var certificate = (await certificates.GetAllAsync(cancellationToken)).FirstOrDefault(c => c.Id == ownCertificateId);
+                        if (certificate is not { HasPrivateKey: true })
+                            return Results.BadRequest(new ApiError($"Certificate {ownCertificateId} does not exist or has no private key."));
+                        partner.OwnCertificateId = certificate.Id;
+                        partner.OwnCertificate = certificate;
+                    }
+                }
+
                 partner.Name = request.Name?.Trim() ?? partner.Name;
                 partner.Description = request.Description ?? partner.Description;
                 partner.Enabled = request.Enabled ?? partner.Enabled;
@@ -144,7 +161,8 @@ public static class ConfigurationEndpoints
             })
             .WithSummary("Creates the partner with the AS2 name or updates it.")
             .WithDescription("connection is the name of the connection (required for a new partner); defaultIdentity the AS2 name of an " +
-                             "identity, an empty string removes it.");
+                             "identity, an empty string removes it; ownCertificateId the id from POST /certificates of our certificate (with " +
+                             "the private key) used for this partner instead of the identity's, 0 removes it.");
 
         configuration.MapPut("/identities/{as2Id}", async (string as2Id, IdentityRequest request, IIdentityRepository identities,
                 IDataService dataService, CancellationToken cancellationToken) =>
@@ -237,7 +255,7 @@ public class ConnectionRequest
 }
 
 public record PartnerRequest(string? Name, string? Description, string? Connection, bool? Enabled, string? DefaultIdentity,
-    string? ContentType, string? Subject);
+    string? ContentType, string? Subject, int? OwnCertificateId = null);
 
 public record IdentityRequest(string? Name, string? Description, string? Email, int? SigningCertificateId, int? DecryptionCertificateId);
 

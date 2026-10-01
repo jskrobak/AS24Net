@@ -216,6 +216,9 @@ public class DataService(
                 .Where(c => c.SignatureCertificateId == id || c.PreviousSignatureCertificateId == id
                                                            || c.EncryptionCertificateId == id || c.TlsCertificateId == id)
                 .Select(c => $"connection {c.Name}"))
+            .Concat((await partnerRepository.GetAllAsync())
+                .Where(p => p.OwnCertificateId == id)
+                .Select(p => $"partner {p.Name}"))
             .Concat((await changeRepository.GetScheduledAsync())
                 .Where(c => c.CertificateId == id)
                 .Select(c => $"the change of connection {c.ConnectionName} at {c.ActivateAt:g}"))

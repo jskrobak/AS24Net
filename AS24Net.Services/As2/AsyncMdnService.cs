@@ -82,7 +82,7 @@ public class AsyncMdnService(
             var partner = message.PartnerId is { } partnerId ? await partners.FindWithRefsAsync(partnerId, cancellationToken) : null;
             if (shadowMode.Enabled)
             {
-                await SuppressAsync(message, identity, unitOfWork, cancellationToken);
+                await SuppressAsync(message, identity, partner, unitOfWork, cancellationToken);
                 continue;
             }
 
@@ -101,7 +101,7 @@ public class AsyncMdnService(
                         $"The message is not signed, so its MDN is posted only to the host of the partner's URL, not to {message.MdnUrl}.");
                 }
 
-                var mdn = BuildMdn(message, identity, message.Status == ReceivedStatus.Failed ? message.Error : null);
+                var mdn = BuildMdn(message, identity, partner, message.Status == ReceivedStatus.Failed ? message.Error : null);
                 await PostAsync(partner, message.MdnUrl!, mdn, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
@@ -145,12 +145,12 @@ public class AsyncMdnService(
     /// Shadow mode: the MDN is built as for real, so that signing it is tried, and not posted. The message is not
     /// picked up again, even when shadow mode is turned off later.
     /// </summary>
-    private async Task SuppressAsync(ReceivedMessage message, Identity? identity, IUnitOfWork unitOfWork, CancellationToken cancellationToken)
+    private async Task SuppressAsync(ReceivedMessage message, Identity? identity, Partner? partner, IUnitOfWork unitOfWork, CancellationToken cancellationToken)
     {
         string? error = null;
         try
         {
-            BuildMdn(message, identity, message.Status == ReceivedStatus.Failed ? message.Error : null);
+            BuildMdn(message, identity, partner, message.Status == ReceivedStatus.Failed ? message.Error : null);
         }
         catch (Exception ex)
         {
@@ -191,11 +191,11 @@ public class AsyncMdnService(
 
     /// <summary>
     /// The MDN of a received message: from its identity (or the AS2 name it was sent to) to the partner, signed
-    /// when that was requested and the identity has a signing certificate.
+    /// when that was requested and the identity has a signing certificate (or the partner our own certificate).
     /// </summary>
-    public static As2OutboundMdn BuildMdn(ReceivedMessage message, Identity? identity, string? reason)
+    public static As2OutboundMdn BuildMdn(ReceivedMessage message, Identity? identity, Partner? partner, string? reason)
     {
-        var signing = message.MdnSignedRequested && identity is not null ? As2Certificates.SigningCertificate(identity) : null;
+        var signing = message.MdnSignedRequested && identity is not null ? As2Certificates.SigningCertificate(identity, partner) : null;
         var disposition = message.MdnDisposition ?? Mdn.ProcessedDisposition;
         return MdnProcessor.Build(new MdnOptions
         {

@@ -54,6 +54,7 @@ public class A24DbContext(DbContextOptions options, IDataProtectionProvider? dat
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.As2Id).IsUnique();
             entity.HasOne(e => e.DefaultIdentity).WithMany().OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(e => e.OwnCertificate).WithMany().OnDelete(DeleteBehavior.SetNull);
             // A connection is deleted only when no partner uses it any more.
             entity.HasOne(e => e.Connection).WithMany(c => c.Partners).OnDelete(DeleteBehavior.Restrict);
         });

@@ -135,7 +135,7 @@ public class MiscellaneousTests
             MdnDisposition = Mdn.ProcessedDisposition, MdnMicAlgorithm = "sha-256",
         };
 
-        var mdn = AsyncMdnService.BuildMdn(message, identity, null);
+        var mdn = AsyncMdnService.BuildMdn(message, identity, null, null);
         using var certificate = CertificateLoader.Load(entity);
         var read = MdnProcessor.Read(mdn.Headers, mdn.Body, [X509CertificateLoader.LoadCertificate(certificate.RawData)], requireSignature: true);
 

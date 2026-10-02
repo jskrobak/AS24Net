@@ -97,9 +97,15 @@
                                     <div class="text-body-secondary">@result.Duration.TotalSeconds.ToString("F1") s as @result.Identity</div>
                                 }
                             </td>
-                            <td>
+                            <td class="text-nowrap">
                                 <HxButton Size="ButtonSize.Small" Color="ThemeColor.Secondary" Icon="BootstrapIcon.PlayFill"
                                           Tooltip="Test this partner" Enabled="CanStart" OnClick="() => Start([partner])" />
+                                @if (result is not null && IsHttps(partner))
+                                {
+                                    <HxButton Size="ButtonSize.Small" Color="ThemeColor.Secondary" Icon="BootstrapIcon.ShieldLock"
+                                              Tooltip="Use the HTTPS server's certificate as the partner's signature certificate"
+                                              Enabled="!Tests.IsRunning && fetching is null" OnClick="() => ShowServerCertificateAsync(partner)" />
+                                }
                             </td>
                         </tr>
                     }
@@ -108,3 +114,54 @@
         </div>
     </BodyTemplate>
 </HxCard>
+
+<HxModal @ref="serverCertificateModal" Title="@($"HTTPS certificate of {serverCertificatePartner?.Name}")" ShowCloseButton="true" Size="ModalSize.Large">
+    <BodyTemplate>
+        @if (serverCertificate is { } certificate && serverCertificatePartner is { } partner)
+        {
+            var expired = certificate.ValidTo < Now || certificate.ValidFrom > Now;
+            var current = partner.Connection.SignatureCertificate;
+            <dl class="row small mb-3">
+                <dt class="col-sm-3">Server</dt>
+                <dd class="col-sm-9 a24-code">@certificate.Host</dd>
+                <dt class="col-sm-3">Subject</dt>
+                <dd class="col-sm-9 text-break">@certificate.Subject</dd>
+                <dt class="col-sm-3">Issued by</dt>
+                <dd class="col-sm-9 text-break">@certificate.Issuer</dd>
+                <dt class="col-sm-3">Valid</dt>
+                <dd class="col-sm-9 @(expired ? "text-danger" : "")">@certificate.ValidFrom.ToString("g") – @certificate.ValidTo.ToString("g")</dd>
+                <dt class="col-sm-3">SHA-256</dt>
+                <dd class="col-sm-9 a24-code text-break">@certificate.Sha256Fingerprint</dd>
+                <dt class="col-sm-3">Current signature certificate</dt>
+                <dd class="col-sm-9 text-break">
+                    @if (current is null)
+                    {
+                        <span class="text-body-secondary">none</span>
+                    }
+                    else
+                    {
+                        @current.Name<span class="@(current.ValidTo < Now ? "text-danger" : "text-body-secondary")">, valid to @current.ValidTo.ToString("d")</span>
+                    }
+                </dd>
+            </dl>
+            @if (expired)
+            {
+                <HxAlert Color="ThemeColor.Danger" CssClass="small mb-0">The server's certificate is not valid now and cannot be used.</HxAlert>
+            }
+            else
+            {
+                <HxAlert Color="ThemeColor.Warning" CssClass="small mb-0">
+                    The certificate becomes the signature certificate of connection <strong>@partner.Connection.Name</strong>, so of all
+                    its partners, right away. Use it only when the partner signs its AS2 messages with the key of its HTTPS server;
+                    most partners use another certificate for AS2, and their messages and MDNs would then be refused.
+                    Compare the SHA-256 fingerprint with the one the partner gives you. The current certificate stays accepted as the
+                    previous one, and the change is in <em>Certificate changes</em> and the log.
+                </HxAlert>
+            }
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        <HxButton Text="Use as signature certificate" Color="ThemeColor.Primary" Icon="BootstrapIcon.ShieldCheck"
+                  Enabled="@(serverCertificate is { } c && c.ValidFrom <= Now && c.ValidTo >= Now)" OnClick="UseServerCertificateAsync" />
+    </FooterTemplate>
+</HxModal>

@@ -17,7 +17,8 @@ public static class MdnEvaluation
     /// A positive MDN delivers the message when its MIC is ours. For a signed message a different MIC means the
     /// partner confirmed other content than we sent, so the message is not delivered; for an unsigned one the MIC
     /// is computed differently by some software, so it is only a warning. So is a MIC in another algorithm than ours,
-    /// which cannot be compared.
+    /// which cannot be compared. Without a MIC nothing is compared; only a signed MDN has to carry one (RFC 4130, 7.4.3),
+    /// so only that is worth a warning: an unsigned MDN without it is how many AS2 servers answer.
     /// </summary>
     public static MdnOutcome Evaluate(OutgoingMessage message, Mdn mdn)
     {
@@ -25,7 +26,7 @@ public static class MdnEvaluation
             return new MdnOutcome(false, TransferEventType.MessageNotDelivered, $"the MDN reports {problem}", null);
 
         if (mdn.ReceivedContentMic is null)
-            return new MdnOutcome(true, null, null, message.Signed ? "the MDN contains no MIC" : null);
+            return new MdnOutcome(true, null, null, message.Signed && mdn.Signed ? "the signed MDN contains no MIC" : null);
 
         if (Mic.Parse(mdn.ReceivedContentMic) is { } received && Mic.Parse(message.Mic) is { } ours && received.Algorithm != ours.Algorithm)
             return new MdnOutcome(true, null, null,

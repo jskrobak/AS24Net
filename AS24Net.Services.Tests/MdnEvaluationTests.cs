@@ -24,6 +24,24 @@ public class MdnEvaluationTests
     }
 
     [Fact]
+    public void UnsignedMdn_WithoutMic_DeliversWithoutAWarning()
+    {
+        var outcome = MdnEvaluation.Evaluate(Message(), new Mdn { Disposition = Mdn.ProcessedDisposition, Signed = false });
+
+        Assert.True(outcome.Delivered);
+        Assert.Null(outcome.Warning);
+    }
+
+    [Fact]
+    public void SignedMdn_WithoutMic_DeliversWithAWarning()
+    {
+        var outcome = MdnEvaluation.Evaluate(Message(), new Mdn { Disposition = Mdn.ProcessedDisposition, Signed = true });
+
+        Assert.True(outcome.Delivered);
+        Assert.Equal("the signed MDN contains no MIC", outcome.Warning);
+    }
+
+    [Fact]
     public void NegativeMdn_DoesNotDeliverTheMessage()
     {
         var message = Message();

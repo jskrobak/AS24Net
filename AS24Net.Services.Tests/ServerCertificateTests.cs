@@ -63,7 +63,7 @@ public class ServerCertificateTests
             await using var ssl = new SslStream(client.GetStream());
             await ssl.AuthenticateAsServerAsync(certificate);
             // The client closes the connection right after the handshake.
-            await ssl.ReadAsync(new byte[1]);
+            await ssl.ReadAtLeastAsync(new byte[1], 1, throwOnEndOfStream: false);
         }
         catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException)
         {

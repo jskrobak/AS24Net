@@ -101,6 +101,8 @@ signed and unsigned MDNs (see *Tests*).
 | `Certificates:GenerateCertificate` | Create a self-signed certificate for signing and decryption on startup when there is none with a private key (default `true`) |
 | `Certificates:CertificateSubject` | Subject (CN) of the generated certificate (default: machine / container name) |
 | `ReverseProxy:TrustAll` | Trust `X-Forwarded-*` headers from any proxy |
+| `Authentication:PasswordSignIn` | Where the user name and password form works: `Everywhere`, `LocalNetworks` or `Never`; with Entra ID configured the default is `LocalNetworks`, without it passwords always work from everywhere (see *Signing in with Microsoft Entra ID*) |
+| `Authentication:PasswordSignInNetworks` | Further networks or addresses passwords are accepted from in `LocalNetworks`, e.g. `203.0.113.0/24, 198.51.100.5` |
 | `HealthChecks:MinFreeDiskSpaceMB` | Free disk space below which the storage is reported as degraded (default 1024) |
 | `HealthChecks:WebhookUrl`, `HealthChecks:WebhookSecret` | Webhook `health.changed` called when the state of a health check changes |
 | `Webhooks:EventsUrl`, `Webhooks:EventsSecret` | Webhook called on every message and certificate event (see *Webhooks*) |
@@ -232,7 +234,8 @@ order:
    `appsettings.{Environment}.local.json`, the user secrets or an environment variable (`Entra__ClientSecret`),
    see *Configuration* above. Without the section nothing changes and the sign in page only asks for a password.
 4. **Restart the application.** The sign in page now offers *Sign in with Microsoft*.
-5. **Sign in with a password** and give every user their address on the *Users* page (the icon with the badge):
+5. **Sign in with a password** from the internal network or through an SSH tunnel (see below) and give every user
+   their address on the *Users* page (the icon with the badge):
    the e-mail address or user principal name Entra ID knows them by. Until that is done nobody gets in that way,
    the administrator included — Entra ID says who somebody is, the user list says who may come in. An identity
    without a user is refused with a message that names the address, so it can be copied from there.
@@ -241,9 +244,19 @@ order:
 The address is compared with the claim `preferred_username` of Entra ID, and with `email` or `upn` when that is
 missing; for a work account it is normally the user principal name.
 
-The sign in with a password stays available, so that a wrong tenant or an expired secret cannot lock the
-administrator out. Behind a reverse proxy set `ReverseProxy:TrustAll` (or the proxy's address), otherwise the
-application builds the redirect from the internal address and Entra ID refuses it with `AADSTS50011`.
+Once Entra ID is configured, the user name and password form works **only from localhost and private networks**
+(`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, IPv6 unique local addresses): from the internet the sign in page
+shows *Sign in with Microsoft* alone and `POST /account/login` answers `404`, so bots have no form to try passwords
+on. A password still works from the internal network or through an SSH tunnel
+(`ssh -L 18090:localhost:8080 server`, then `http://localhost:18090`), so that a wrong tenant or an expired secret
+cannot lock the administrator out. `Authentication:PasswordSignIn` changes it: `Everywhere` as without Entra ID,
+`Never` for Entra ID only; `Authentication:PasswordSignInNetworks` adds networks such as a VPN. Refused attempts are
+logged with the address.
+
+Behind a reverse proxy set `ReverseProxy:TrustAll` (or the proxy's address): otherwise the application builds the
+redirect from the internal address and Entra ID refuses it with `AADSTS50011`, and every request seems to come from
+the proxy, so that with a proxy on the same host passwords would be accepted from the internet. The client address
+is the last one in `X-Forwarded-For`, the one the proxy added; an address a client puts in front of it is ignored.
 
 ## Running locally
 

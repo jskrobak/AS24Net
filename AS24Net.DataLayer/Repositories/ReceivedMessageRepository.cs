@@ -80,8 +80,11 @@ public class ReceivedMessageRepository(
     }
 
     public Task<int> CountMdnsPendingAsync(DateTime receivedBefore, CancellationToken cancellationToken = default) => Data
-        .Where(m => (m.MdnStatus == MdnDeliveryStatus.Pending || m.MdnStatus == MdnDeliveryStatus.Retrying
-                     || m.MdnStatus == MdnDeliveryStatus.Failed) && m.Created < receivedBefore)
+        .Where(m => (m.MdnStatus == MdnDeliveryStatus.Pending || m.MdnStatus == MdnDeliveryStatus.Retrying) && m.Created < receivedBefore)
+        .CountAsync(cancellationToken);
+
+    public Task<int> CountMdnsFailedAsync(DateTime receivedSince, CancellationToken cancellationToken = default) => Data
+        .Where(m => m.MdnStatus == MdnDeliveryStatus.Failed && m.Created >= receivedSince)
         .CountAsync(cancellationToken);
 
     public Task<int> CountFailedAsync(DateTime since, CancellationToken cancellationToken = default) => Data

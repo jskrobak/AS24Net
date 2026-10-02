@@ -46,10 +46,22 @@ public class HealthCheckTests
     [Fact]
     public void Messages_StuckOrFailed_AreDegraded()
     {
-        Assert.Equal(HealthStatus.Healthy, MessagesHealthCheck.Evaluate(0, 0, 0, 0).Status);
-        Assert.Equal(HealthStatus.Degraded, MessagesHealthCheck.Evaluate(1, 0, 0, 0).Status);
-        Assert.Equal(HealthStatus.Degraded, MessagesHealthCheck.Evaluate(0, 0, 2, 0).Status);
-        Assert.Contains("refused", MessagesHealthCheck.Evaluate(0, 0, 0, 3).Description);
+        Assert.Equal(HealthStatus.Healthy, MessagesHealthCheck.Evaluate(0, 0, 0, 0, 0).Status);
+        Assert.Equal(HealthStatus.Degraded, MessagesHealthCheck.Evaluate(1, 0, 0, 0, 0).Status);
+        Assert.Equal(HealthStatus.Degraded, MessagesHealthCheck.Evaluate(0, 0, 2, 0, 0).Status);
+        Assert.Contains("refused", MessagesHealthCheck.Evaluate(0, 0, 0, 0, 3).Description);
+    }
+
+    [Fact]
+    public void Messages_GivenUpMdnIsReportedApartFromOneStillRetried()
+    {
+        var result = MessagesHealthCheck.Evaluate(0, 0, 0, 4, 0);
+
+        Assert.Equal(HealthStatus.Degraded, result.Status);
+        Assert.Contains("within the retries", result.Description);
+        Assert.DoesNotContain("for more than", result.Description);
+        Assert.Equal(4, result.Data["mdnsGivenUpLast24Hours"]);
+        Assert.Equal(0, result.Data["mdnsNotPostedOver1Hour"]);
     }
 
     [Fact]

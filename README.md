@@ -414,7 +414,7 @@ readinessProbe:
 | `send-service` | the service stopped or has not processed the queue for three send intervals and a minute; degraded while paused |
 | `certificates` | degraded: a certificate in use (identities, connections with an enabled partner, our certificates of enabled partners) expired or expires within 30 days, unless a scheduled change replaces it in time |
 | `certificate-changes` | degraded: a scheduled change is more than 10 minutes overdue, its certificate expires before its time, or a change failed within 7 days |
-| `messages` | degraded: a message waits to be sent for more than 24 hours, failed or was not delivered in the last 24 hours, an asynchronous MDN of ours could not be posted for an hour, or a message of a partner was refused in the last 24 hours |
+| `messages` | degraded: a message waits to be sent for more than 24 hours, failed or was not delivered in the last 24 hours, an asynchronous MDN of ours is still being retried after an hour or was given up for a message received in the last 24 hours, or a message of a partner was refused in the last 24 hours |
 | `internal-queues` | degraded: the queue of the transfer log, the webhooks or the hooks is 80 % full and about to drop items |
 | `retention` | degraded: the nightly removal of old data failed or has not run for two days |
 

@@ -39,10 +39,55 @@ public partial class ConnectionTests : ComponentBase, IDisposable
 
     protected override async Task OnInitializedAsync()
     {
-        partners = (await DataService.GetAllPartnersAsync()).OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        await LoadPartnersAsync();
         identities = await DataService.GetAllIdentitiesAsync();
         Tests.Changed += HandleChanged;
     }
+
+    private async Task LoadPartnersAsync() =>
+        partners = (await DataService.GetAllPartnersAsync()).OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
+
+    #region Changing a partner or a connection and testing again
+
+    private HxModal partnerEditModal = null!;
+    private HxModal connectionEditModal = null!;
+    private Partner? editedPartner;
+    private Connection? editedConnection;
+    private List<Connection> connections = [];
+    private List<Certificate> certificates = [];
+    private List<Certificate> ownCertificates => certificates.Where(c => c.HasPrivateKey).ToList();
+
+    private async Task EditPartnerAsync(Partner partner)
+    {
+        connections = await DataService.GetAllConnectionsAsync();
+        certificates = await DataService.GetAllCertificatesAsync();
+        editedPartner = partner;
+        await partnerEditModal.ShowAsync();
+    }
+
+    private async Task EditConnectionAsync(Connection connection)
+    {
+        certificates = await DataService.GetAllCertificatesAsync();
+        editedConnection = connection;
+        await connectionEditModal.ShowAsync();
+    }
+
+    private async Task HandlePartnerSavedAsync(Partner partner)
+    {
+        await partnerEditModal.HideAsync();
+        await LoadPartnersAsync();
+        Start(partners.Where(p => p.Id == partner.Id).ToList());
+    }
+
+    /// <summary>The connection is shared: all its partners are tested again.</summary>
+    private async Task HandleConnectionSavedAsync(Connection connection)
+    {
+        await connectionEditModal.HideAsync();
+        await LoadPartnersAsync();
+        Start(partners.Where(p => p.ConnectionId == connection.Id).ToList());
+    }
+
+    #endregion
 
     private void HandleChanged() => InvokeAsync(StateHasChanged);
 

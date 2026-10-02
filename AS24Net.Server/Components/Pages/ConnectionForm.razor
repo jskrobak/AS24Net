@@ -1,0 +1,100 @@
+@using AS24Net.Core.Security
+@using AS24Net.Domain
+
+@* The form of a connection, used in Connections and in Connection tests. *@
+<EditForm Model="@Connection" OnValidSubmit="SaveAsync">
+    <DataAnnotationsValidator />
+
+    <p class="small text-body-secondary">
+        The server of one or more partners and what was agreed with it. Partners that differ only in their AS2 name share
+        one connection, so their certificate is changed once for all of them.
+    </p>
+    <div class="row g-2">
+        <div class="col-md-6"><HxInputText Label="Name" @bind-Value="@Connection.Name" /></div>
+        <div class="col-md-6"><HxInputText Label="Description" @bind-Value="@Connection.Description" /></div>
+        <div class="col-md-12"><HxInputText Label="URL" Hint="The partner's AS2 endpoint messages are posted to." @bind-Value="@Connection.Url" InputCssClass="a24-code" /></div>
+        @if (Connection.Partners.Count > 0)
+        {
+            <div class="col-md-12 small text-body-secondary">
+                Partners: @string.Join(", ", Connection.Partners.OrderBy(p => p.Name).Select(p => $"{p.Name} ({p.As2Id})"))
+            </div>
+        }
+    </div>
+
+    <h6 class="text-body-secondary mt-4">Messages we send</h6>
+    <div class="row g-2">
+        <div class="col-md-3"><HxCheckbox Text="Sign" @bind-Value="@Connection.SignMessages" /></div>
+        <div class="col-md-3">
+            <HxSelect TItem="string" TValue="string" Label="Signature digest" Data="As2Algorithms.DigestAlgorithms"
+                      @bind-Value="@Connection.SignatureAlgorithm" Nullable="false" Enabled="@Connection.SignMessages" />
+        </div>
+        <div class="col-md-3"><HxCheckbox Text="Encrypt" @bind-Value="@Connection.EncryptMessages" /></div>
+        <div class="col-md-3">
+            <HxSelect TItem="string" TValue="string" Label="Encryption" Data="As2Algorithms.EncryptionAlgorithms"
+                      @bind-Value="@Connection.EncryptionAlgorithm" Nullable="false" Enabled="@Connection.EncryptMessages" />
+        </div>
+        <div class="col-md-6">
+            <HxCheckbox Text="Without MIME when not signed" @bind-Value="@Connection.UnsignedWithoutMime"
+                        Enabled="@(Connection.EncryptMessages && !Connection.SignMessages && !Connection.CompressMessages)"
+                        Hint="The payload itself in the envelope of an unsigned, uncompressed message, as Mendelson AS2 wants it." />
+        </div>
+        <div class="col-md-3"><HxCheckbox Text="Compress (RFC 5402)" @bind-Value="@Connection.CompressMessages" /></div>
+        <div class="col-md-9"><HxCheckbox Text="Compress before signing (recommended), otherwise the signed message" @bind-Value="@Connection.CompressBeforeSigning" Enabled="@Connection.CompressMessages" /></div>
+        <div class="col-md-4">
+            <HxSelect TItem="MdnMode" TValue="MdnMode" Label="MDN" Data="mdnModes" @bind-Value="@Connection.MdnMode" Nullable="false"
+                      TextSelector="@(m => m switch { MdnMode.Sync => "Synchronous (in the HTTP response)", MdnMode.Async => "Asynchronous (posted to our URL)", _ => "None" })" />
+        </div>
+        <div class="col-md-4"><HxCheckbox Label="&nbsp;" Text="Request a signed MDN" @bind-Value="@Connection.RequestSignedMdn" Enabled="@(Connection.MdnMode != MdnMode.None)" /></div>
+        <div class="col-md-4"><HxInputNumber Label="Asynchronous MDN within (minutes)" Hint="Otherwise the message is sent again." Decimals="0" @bind-Value="@Connection.MdnTimeoutMinutes" Enabled="@(Connection.MdnMode == MdnMode.Async)" /></div>
+    </div>
+
+    <h6 class="text-body-secondary mt-4">Messages we receive</h6>
+    <div class="row g-2">
+        <div class="col-md-6"><HxCheckbox Text="Must be signed" @bind-Value="@Connection.RequireSignedMessages" /></div>
+        <div class="col-md-6"><HxCheckbox Text="Must be encrypted" @bind-Value="@Connection.RequireEncryptedMessages" /></div>
+    </div>
+
+    <h6 class="text-body-secondary mt-4">Certificates of the partner</h6>
+    <div class="small text-body-secondary mb-2">
+        Import them in <a href="Certificates">Certificates</a>, or upload a new one in advance with the time it is to be used from in
+        <a href="@($"CertificateChanges?connection={Connection.Id}")">Certificate changes</a>.
+    </div>
+    <div class="row g-2">
+        <div class="col-md-6">
+            <HxSelect TItem="Certificate" TValue="int?" Label="Signature" Hint="Verifies the partner's messages and MDNs."
+                      Data="certificates" @bind-Value="@Connection.SignatureCertificateId"
+                      TextSelector="@CertificateText" ValueSelector="@(c => (int?)c.Id)" Nullable="true" NullText="-none-" />
+            @if (Connection.PreviousSignatureCertificateId is { } previous)
+            {
+                <div class="small text-body-secondary">
+                    The previous one is accepted too: @PreviousSignatureCertificateName(previous)
+                    <HxButton Size="ButtonSize.Small" Color="ThemeColor.Link" Text="Stop accepting it"
+                              OnClick="() => Connection.PreviousSignatureCertificateId = null" />
+                </div>
+            }
+        </div>
+        <div class="col-md-6">
+            <HxSelect TItem="Certificate" TValue="int?" Label="Encryption" Hint="Our messages are encrypted for it."
+                      Data="certificates" @bind-Value="@Connection.EncryptionCertificateId"
+                      TextSelector="@CertificateText" ValueSelector="@(c => (int?)c.Id)" Nullable="true" NullText="-none-" />
+        </div>
+        <div class="col-md-6">
+            <HxSelect TItem="Certificate" TValue="int?" Label="HTTPS server" Hint="Trusted for the partner's HTTPS (its own or its CA); empty: the system trust store."
+                      Data="certificates" @bind-Value="@Connection.TlsCertificateId"
+                      TextSelector="@CertificateText" ValueSelector="@(c => (int?)c.Id)" Nullable="true" NullText="-system trust store-" />
+        </div>
+    </div>
+
+    <h6 class="text-body-secondary mt-4">HTTP</h6>
+    <div class="row g-2">
+        <div class="col-md-4"><HxInputText Label="HTTP user name" Hint="Basic authentication, if the partner wants it." @bind-Value="@Connection.HttpUserName" /></div>
+        <div class="col-md-4"><HxInputText Label="HTTP password" Type="InputType.Password" @bind-Value="@Connection.HttpPassword" /></div>
+        <div class="col-md-4"><HxInputNumber Label="Timeout (seconds)" Hint="With a synchronous MDN the time until it arrives." Decimals="0" @bind-Value="@Connection.TimeoutSeconds" /></div>
+    </div>
+
+    <h6 class="text-body-secondary mt-4">Contacts</h6>
+    <div class="form-text mb-2">People to call when the connection does not work. E-mails and phones separated by commas.</div>
+    <PartnerContactsEditor Contacts="Connection.Contacts" />
+
+    <HxSubmit Color="ThemeColor.Primary" CssClass="mt-4 d-block">Save</HxSubmit>
+</EditForm>

@@ -12,8 +12,10 @@ public partial class Partners : ComponentBase
     [Inject] protected IDataService DataService { get; set; } = null!;
     [Inject] protected IHxMessengerService Messenger { get; set; } = null!;
     [Inject] protected NavigationManager Navigation { get; set; } = null!;
+    [Inject] protected IHxMessageBoxService MessageBox { get; set; } = null!;
 
     private Partner? currentPartner;
+    private HashSet<Partner> selectedItems = [];
     private PartnerFilter filterModel = new();
     private HxGrid<Partner> gridComponent = null!;
     private HxModal partnerEditModal = null!;
@@ -79,6 +81,33 @@ public partial class Partners : ComponentBase
         catch (Exception ex)
         {
             Messenger.AddError($"Delete failed: {ex.Message}");
+        }
+
+        await gridComponent.RefreshDataAsync();
+    }
+
+    private async Task HandleDeleteSelected()
+    {
+        if (selectedItems.Count == 0)
+        {
+            Messenger.AddWarning("No partner is selected.");
+            return;
+        }
+
+        var names = string.Join(", ", selectedItems.Select(p => p.Name).Order(StringComparer.OrdinalIgnoreCase));
+        if (!await MessageBox.ConfirmAsync("Delete partners",
+                $"Delete {selectedItems.Count} partner(s): {names}? Their outgoing messages are deleted too."))
+            return;
+
+        try
+        {
+            await DataService.DeletePartnersAsync(selectedItems.ToList());
+            Messenger.AddInformation($"{selectedItems.Count} partner(s) deleted.");
+            selectedItems.Clear();
+        }
+        catch (Exception ex)
+        {
+            Messenger.AddError($"Delete failed, no partner was deleted: {ex.Message}");
         }
 
         await gridComponent.RefreshDataAsync();

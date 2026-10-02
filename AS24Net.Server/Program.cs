@@ -170,6 +170,7 @@ builder.Services.AddScoped<MessageQueueService>();
 builder.Services.AddScoped<As2Sender>();
 builder.Services.AddScoped<As2InboundService>();
 builder.Services.AddScoped<CertificateChangeService>();
+builder.Services.AddScoped<ServerCertificateService>();
 
 builder.AddBlazorCookies();
 

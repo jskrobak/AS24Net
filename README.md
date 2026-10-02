@@ -651,13 +651,22 @@ choice, *Partners → Connection tests* all of them one after another (or only t
 | Configuration | the certificates the messages need, the public URL for an asynchronous MDN | a certificate that is used is missing, expired, not valid yet or has no private key (the test goes on and reports it) |
 | Connection | the host name is resolved and the TCP connection opened | the name is unknown, the port closed or a firewall drops the connection |
 | TLS | the handshake, with the partner's server certificate checked as when sending (system trust store, or the certificate trusted for its HTTPS) | the certificate is not trusted, expired or not issued for the host name; the protocol, the cipher suite and the certificate are shown |
-| HTTP | a `GET` of the partner's URL with its basic authentication | `401` / `407` (credentials missing or refused), `403`, `404` (wrong path) or `5xx` |
+| HTTP | a `GET` of the partner's URL with its basic authentication | `401` / `407` (credentials missing or refused), `403`, `404` also to an empty `POST` (wrong path) or `5xx` |
 
 AS2 has no request that does nothing, so the test stops at the answer to the `GET`: most AS2 servers answer it
 with `405` (only `POST` is allowed) or a page of their own, which shows as much as a success does, namely that the
-address exists and lets us in. No message and no MDN is sent and the send queue is not touched. Warnings, e.g. a
+address exists and lets us in. Some servers answer every `GET` with `404`, also on the right path; then the test
+sends an empty `POST`, which is no AS2 message and is refused as one (usually `400`), and only a `404` to it too
+means a wrong path. No message and no MDN is sent and the send queue is not touched. Warnings, e.g. a
 certificate that expires within 30 days, plain HTTP without encryption or a public URL on `localhost` for a partner
 elsewhere, do not make the test fail.
+
+Some partners sign their AS2 messages with the key of their HTTPS server. When their signature certificate has
+expired, the shield button next to a tested partner with an `https` URL reads the certificate its server presents now
+and shows its subject, issuer, validity and SHA-256 fingerprint next to the current signature certificate. *Use as
+signature certificate* applies it to the partner's connection right away as a certificate change (logged, run as a
+hook and reported by webhook), with the current one kept as the previous one. Compare the fingerprint with the one
+the partner gives: for a partner that uses another certificate for AS2 its messages and MDNs would be refused.
 
 Every test is written to *Logs → Outgoing* (`ConnectionTested`) with its details. The contacts of the partner's connection are
 shown next to a test that failed. From a script:

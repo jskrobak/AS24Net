@@ -1,6 +1,8 @@
 using Havit.Blazor.Components.Web;
 using Havit.Blazor.Components.Web.Bootstrap;
+using Havit.Services.TimeServices;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using AS24Net.Domain;
 using AS24Net.Services;
 using AS24Net.Services.ConnectionTests;
@@ -12,8 +14,18 @@ public partial class ConnectionTests : ComponentBase, IDisposable
     [Inject] protected ConnectionTestService Tests { get; set; } = null!;
     [Inject] protected IDataService DataService { get; set; } = null!;
     [Inject] protected IHxMessengerService Messenger { get; set; } = null!;
+    [Inject] protected ServerCertificateService ServerCertificates { get; set; } = null!;
+    [Inject] protected ITimeService TimeService { get; set; } = null!;
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = null!;
 
     private List<Partner> partners = [];
+
+    private HxModal serverCertificateModal = null!;
+    private Partner? serverCertificatePartner;
+    private ServerCertificate? serverCertificate;
+
+    /// <summary>The partner whose server certificate is being read.</summary>
+    private int? fetching;
     private List<Identity> identities = [];
 
     /// <summary>Empty: every partner is tested as its default identity.</summary>
@@ -45,6 +57,53 @@ public partial class ConnectionTests : ComponentBase, IDisposable
         {
             Messenger.AddError(ex.Message);
         }
+    }
+
+    private DateTime Now => TimeService.GetCurrentTime();
+
+    private static bool IsHttps(Partner partner) =>
+        Uri.TryCreate(partner.Connection.Url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps;
+
+    private async Task ShowServerCertificateAsync(Partner partner)
+    {
+        fetching = partner.Id;
+        try
+        {
+            serverCertificate = await ServerCertificates.FetchAsync(partner.Id);
+            serverCertificatePartner = await ServerCertificates.GetPartnerAsync(partner.Id);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Messenger.AddError(ex.Message);
+            return;
+        }
+        finally
+        {
+            fetching = null;
+        }
+
+        await serverCertificateModal.ShowAsync();
+    }
+
+    private async Task UseServerCertificateAsync()
+    {
+        if (serverCertificate is null || serverCertificatePartner is null)
+            return;
+
+        try
+        {
+            var change = await ServerCertificates.UseAsSignatureCertificateAsync(serverCertificatePartner.Id, serverCertificate,
+                (await AuthenticationState).User.Identity?.Name);
+            // The scheduler applies the change in a moment; a test started at once could still see the old certificate.
+            Messenger.AddInformation($"The certificate is applied to connection {change.ConnectionName} right away. Test the partner again in a moment.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Messenger.AddError(ex.Message);
+            return;
+        }
+
+        await serverCertificateModal.HideAsync();
     }
 
     internal static ThemeColor ResultColor(ConnectionTestResult result) =>

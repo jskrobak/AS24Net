@@ -1,0 +1,37 @@
+@using AS24Net.Domain
+
+@* The form of a partner, used in Partners and in Connection tests. *@
+<EditForm Model="@Partner" OnValidSubmit="SaveAsync">
+    <DataAnnotationsValidator />
+
+    <div class="row g-2">
+        <div class="col-md-6"><HxInputText Label="Name" @bind-Value="@Partner.Name" /></div>
+        <div class="col-md-6"><HxInputText Label="AS2 name" Hint="AS2-To of our messages, AS2-From of the partner's." @bind-Value="@Partner.As2Id" InputCssClass="a24-code" /></div>
+        <div class="col-md-12">
+            <HxSelect TItem="Connection" TValue="int" Label="Connection"
+                      Hint="The partner's server: URL, security, MDN and certificates, shared by the partners that differ only in the AS2 name."
+                      Data="Connections" @bind-Value="@Partner.ConnectionId"
+                      TextSelector="@(c => $"{c.Name} ({c.Url})")" ValueSelector="@(c => c.Id)" Nullable="false" />
+            <div class="small text-body-secondary">
+                <a href="Connections">A new connection</a> is set up in Connections.
+            </div>
+        </div>
+        <div class="col-md-12"><HxInputText Label="Description" @bind-Value="@Partner.Description" /></div>
+        <div class="col-md-6">
+            <HxSelect TItem="Identity" TValue="int?" Label="Default identity" Hint="We send from it when the message names no identity."
+                      Data="Identities" @bind-Value="@Partner.DefaultIdentityId"
+                      TextSelector="@(i => $"{i.Name} ({i.As2Id})")" ValueSelector="@(i => (int?)i.Id)" Nullable="true" NullText="-none-" />
+        </div>
+        <div class="col-md-6"><HxInputText Label="Content type" Hint="Media type of the payload when the message names none, e.g. application/edifact." @bind-Value="@Partner.ContentType" /></div>
+        <div class="col-md-6"><HxInputText Label="Subject" Hint="Subject of our messages; the file name when empty." @bind-Value="@Partner.Subject" /></div>
+        <div class="col-md-6">
+            <HxSelect TItem="Certificate" TValue="int?" Label="Our certificate"
+                      Hint="Signs our messages and MDNs to this partner and decrypts its messages instead of the certificates of the identity, for a partner that knows us by another certificate."
+                      Data="OwnCertificates" @bind-Value="@Partner.OwnCertificateId"
+                      TextSelector="@(c => $"{c.Name} (to {c.ValidTo:d})")" ValueSelector="@(c => (int?)c.Id)" Nullable="true" NullText="-the identity's-" />
+        </div>
+        <div class="col-md-6"><HxCheckbox Label="Enabled" Text="Messages are sent to the partner and accepted from it" @bind-Value="@Partner.Enabled" /></div>
+    </div>
+
+    <HxSubmit Color="ThemeColor.Primary" CssClass="mt-4">Save</HxSubmit>
+</EditForm>

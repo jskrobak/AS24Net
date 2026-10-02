@@ -113,18 +113,8 @@ public partial class Partners : ComponentBase
         await gridComponent.RefreshDataAsync();
     }
 
-    private async Task SavePartner()
+    private async Task HandleSavedAsync()
     {
-        try
-        {
-            await DataService.SavePartnerAsync(currentPartner!);
-        }
-        catch (InvalidOperationException ex)
-        {
-            Messenger.AddError(ex.Message);
-            return;
-        }
-
         await gridComponent.RefreshDataAsync();
         await partnerEditModal.HideAsync();
     }

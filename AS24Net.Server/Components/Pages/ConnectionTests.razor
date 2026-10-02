@@ -13,6 +13,7 @@
             connection, runs the TLS handshake with the partner's server certificate checked as when sending and asks for
             the partner's URL with a <code>GET</code>, with its HTTP authentication. No message and no MDN is sent and the
             send queue is not touched. The partners are tested one after another; every test is in the transfer log.
+            Click a partner or a connection to change it; the test runs again when it is saved.
         </p>
 
         <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
@@ -62,10 +63,15 @@
                         var result = Tests.Results.GetValueOrDefault(partner.Id);
                         <tr>
                             <td>
-                                <div class="fw-bold @(partner.Enabled ? "" : "text-body-secondary text-decoration-line-through")">@partner.Name</div>
+                                <button type="button" class="btn btn-link p-0 fw-bold text-start @(partner.Enabled ? "" : "text-body-secondary text-decoration-line-through")"
+                                        title="Edit the partner" @onclick="() => EditPartnerAsync(partner)">@partner.Name</button>
                                 <div class="small text-body-secondary a24-code">@partner.As2Id</div>
                             </td>
-                            <td class="small text-break" style="max-width: 20rem;">@partner.Connection.Url</td>
+                            <td class="small text-break" style="max-width: 20rem;">
+                                <button type="button" class="btn btn-link btn-sm p-0 text-start" title="Edit the connection, shared by its partners"
+                                        @onclick="() => EditConnectionAsync(partner.Connection)">@partner.Connection.Name</button>
+                                <div>@partner.Connection.Url</div>
+                            </td>
                             <td>
                                 @if (Tests.Current == partner.Id)
                                 {
@@ -114,6 +120,27 @@
         </div>
     </BodyTemplate>
 </HxCard>
+
+<HxModal @ref="partnerEditModal" ShowCloseButton="true" Size="ModalSize.ExtraLarge" Scrollable="true">
+    <HeaderTemplate>Partner @editedPartner?.Name</HeaderTemplate>
+    <BodyTemplate>
+        @if (editedPartner is not null)
+        {
+            <PartnerForm Partner="editedPartner" Connections="connections" Identities="identities" OwnCertificates="ownCertificates"
+                         OnSaved="HandlePartnerSavedAsync" />
+        }
+    </BodyTemplate>
+</HxModal>
+
+<HxModal @ref="connectionEditModal" ShowCloseButton="true" Size="ModalSize.ExtraLarge" Scrollable="true">
+    <HeaderTemplate>Connection @editedConnection?.Name</HeaderTemplate>
+    <BodyTemplate>
+        @if (editedConnection is not null)
+        {
+            <ConnectionForm Connection="editedConnection" Certificates="certificates" OnSaved="HandleConnectionSavedAsync" />
+        }
+    </BodyTemplate>
+</HxModal>
 
 <HxModal @ref="serverCertificateModal" Title="@($"HTTPS certificate of {serverCertificatePartner?.Name}")" ShowCloseButton="true" Size="ModalSize.Large">
     <BodyTemplate>

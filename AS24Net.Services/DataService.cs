@@ -121,6 +121,13 @@ public class DataService(
         await unitOfWork.CommitAsync();
     }
 
+    public async Task DeletePartnersAsync(IReadOnlyCollection<Partner> partners)
+    {
+        foreach (var partner in partners)
+            unitOfWork.AddForDelete(partner);
+        await unitOfWork.CommitAsync();
+    }
+
     public async Task SaveIdentityAsync(Identity identity, int? originalDecryptionCertificateId = null)
     {
         identity.As2Id = identity.As2Id.Trim();

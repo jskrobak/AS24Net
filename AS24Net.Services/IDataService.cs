@@ -38,6 +38,9 @@ public interface IDataService
     Task DeleteConnectionAsync(Connection connection);
     Task SavePartnerAsync(Partner partner);
     Task DeletePartnerAsync(Partner partner);
+
+    /// <summary>Deletes the partners in one transaction: all of them or, when one cannot be deleted, none.</summary>
+    Task DeletePartnersAsync(IReadOnlyCollection<Partner> partners);
     /// <param name="originalDecryptionCertificateId">
     /// The decryption certificate before the edit; when it was replaced, it is kept as the previous one.
     /// </param>

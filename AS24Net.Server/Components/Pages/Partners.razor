@@ -37,7 +37,14 @@
               @bind-FilterModel:after="gridComponent.RefreshDataAsync">
     <CommandsTemplate>
         <HxButton Text="New partner" Color="ThemeColor.Primary" Icon="BootstrapIcon.PlusLg" OnClick="HandleNewItemClicked" />
-        <a class="btn btn-secondary" href="ConnectionTests"><HxIcon Icon="BootstrapIcon.Plug" /> Connection tests</a>
+        <a class="btn btn-secondary text-nowrap" href="ConnectionTests"><HxIcon Icon="BootstrapIcon.Plug" /> Connection tests</a>
+        <HxDropdownButtonGroup>
+            <HxDropdownToggleButton CssClass="contextDropdownToggleButton" Color="ThemeColor.Secondary" Icon="BootstrapIcon.ThreeDots">
+            </HxDropdownToggleButton>
+            <HxDropdownMenu>
+                <HxDropdownItem Icon="BootstrapIcon.Trash" Enabled="selectedItems.Count > 0" OnClick="HandleDeleteSelected">Delete selected (@selectedItems.Count)</HxDropdownItem>
+            </HxDropdownMenu>
+        </HxDropdownButtonGroup>
     </CommandsTemplate>
     <FilterTemplate Context="filterContext">
         <HxInputText Label="Name, AS2 name or connection" @bind-Value="filterContext.Name" />
@@ -50,6 +57,8 @@
                 HeaderRowCssClass="sticky-top"
                 TItem="Partner"
                 DataProvider="GetGridData"
+                MultiSelectionEnabled="true"
+                @bind-SelectedDataItems="selectedItems"
                 SelectedDataItem="currentPartner"
                 SelectedDataItemChanged="HandleSelectedAsync"
                 Responsive="true"
@@ -75,7 +84,7 @@
                         <HxContextMenuItem Text="Test connection" Icon="BootstrapIcon.Plug" OnClick="async () => await HandleTestConnectionClick(partner)" />
                         <HxContextMenuItem Text="Schedule a certificate" Icon="BootstrapIcon.CalendarPlus" OnClick="@(() => Navigation.NavigateTo($"CertificateChanges?connection={partner.ConnectionId}"))" />
                         <HxContextMenuItem Text="Delete" Icon="BootstrapIcon.Trash" OnClick="async () => await HandleDeleteClick(partner)"
-                                           ConfirmationQuestion="@($"Delete partner {partner.Name}? Its messages in the send queue are deleted too.")"/>
+                                           ConfirmationQuestion="@($"Delete partner {partner.Name}? Its outgoing messages are deleted too.")"/>
                     </HxContextMenu>
                 </HxContextMenuGridColumn>
             </Columns>

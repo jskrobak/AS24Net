@@ -22,8 +22,11 @@ public interface IReceivedMessageRepository : IRepository<ReceivedMessage, int>
     /// <summary>Messages whose asynchronous MDN is due to be posted, with partner and identity.</summary>
     Task<List<ReceivedMessage>> GetMdnsToSendAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Asynchronous MDNs still not posted for messages received before the given time.</summary>
+    /// <summary>Asynchronous MDNs still to be posted (not given up) for messages received before the given time.</summary>
     Task<int> CountMdnsPendingAsync(DateTime receivedBefore, CancellationToken cancellationToken = default);
+
+    /// <summary>Asynchronous MDNs given up after the retries, for messages received since the given time.</summary>
+    Task<int> CountMdnsFailedAsync(DateTime receivedSince, CancellationToken cancellationToken = default);
 
     /// <summary>Messages refused since the given time.</summary>
     Task<int> CountFailedAsync(DateTime since, CancellationToken cancellationToken = default);

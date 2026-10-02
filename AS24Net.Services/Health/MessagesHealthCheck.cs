@@ -8,7 +8,10 @@ namespace AS24Net.Services.Health;
 /// <summary>
 /// Messages do not get stuck: none waits to be sent for longer than <see cref="WaitingLimit"/>, none failed for
 /// good or was not delivered within <see cref="FailedWindow"/>, no asynchronous MDN of ours waits longer than
-/// <see cref="MdnLimit"/> to be posted, and no message of a partner was refused within <see cref="FailedWindow"/>.
+/// <see cref="MdnLimit"/> to be posted, none was given up for a message received within <see cref="FailedWindow"/>,
+/// and no message of a partner was refused within <see cref="FailedWindow"/>. A given-up MDN is counted only within
+/// the window, like the other failures: nothing can be done about it any more, and it must not keep the server
+/// degraded for good.
 /// </summary>
 public sealed class MessagesHealthCheck(IServiceScopeFactory serviceScopeFactory, ITimeService timeService) : IHealthCheck
 {
@@ -27,16 +30,18 @@ public sealed class MessagesHealthCheck(IServiceScopeFactory serviceScopeFactory
             await outgoing.CountWaitingAsync(now - WaitingLimit, cancellationToken),
             await outgoing.CountFailedAsync(now - FailedWindow, cancellationToken),
             await received.CountMdnsPendingAsync(now - MdnLimit, cancellationToken),
+            await received.CountMdnsFailedAsync(now - FailedWindow, cancellationToken),
             await received.CountFailedAsync(now - FailedWindow, cancellationToken));
     }
 
-    public static HealthCheckResult Evaluate(int waiting, int failed, int mdnsPending, int refused)
+    public static HealthCheckResult Evaluate(int waiting, int failed, int mdnsPending, int mdnsFailed, int refused)
     {
         var data = new Dictionary<string, object>
         {
             ["waitingOver24Hours"] = waiting,
             ["failedLast24Hours"] = failed,
             ["mdnsNotPostedOver1Hour"] = mdnsPending,
+            ["mdnsGivenUpLast24Hours"] = mdnsFailed,
             ["refusedLast24Hours"] = refused,
         };
 
@@ -47,6 +52,8 @@ public sealed class MessagesHealthCheck(IServiceScopeFactory serviceScopeFactory
             problems.Add($"{failed} message(s) failed or were not delivered in the last {FailedWindow.TotalHours:F0} hours.");
         if (mdnsPending > 0)
             problems.Add($"{mdnsPending} asynchronous MDN(s) could not be posted to the partner for more than {MdnLimit.TotalHours:F0} hour(s).");
+        if (mdnsFailed > 0)
+            problems.Add($"{mdnsFailed} asynchronous MDN(s) of messages received in the last {FailedWindow.TotalHours:F0} hours could not be posted within the retries.");
         if (refused > 0)
             problems.Add($"{refused} message(s) of partners were refused in the last {FailedWindow.TotalHours:F0} hours.");
 

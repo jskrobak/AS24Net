@@ -251,6 +251,18 @@ public sealed class ConnectionTestService(
             {
                 httpStatus = (int)response.StatusCode;
                 var (success, message) = EvaluateResponse(response.StatusCode, response.ReasonPhrase, connection);
+
+                // Some AS2 servers answer every GET with 404, also on the right path. An empty POST, which is no AS2
+                // message and is refused as one, tells whether the path exists.
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                {
+                    using var probe = new HttpRequestMessage(HttpMethod.Post, uri) { Content = new ByteArrayContent([]) };
+                    probe.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+                    using var answer = await http.SendAsync(probe, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    httpStatus = (int)answer.StatusCode;
+                    (success, message) = EvaluateProbe(answer.StatusCode, answer.ReasonPhrase, connection);
+                }
+
                 if (!success)
                     return Result(ConnectionTestStage.Http, message);
 
@@ -358,6 +370,22 @@ public sealed class ConnectionTestService(
             >= HttpStatusCode.InternalServerError => (false, $"The partner's server has a problem ({code})."),
             >= HttpStatusCode.MultipleChoices and < HttpStatusCode.BadRequest => (true, $"The endpoint answered {code} (a redirect is not followed when sending). Nothing was sent."),
             _ => (true, $"The endpoint answered {code}. Nothing was sent."),
+        };
+    }
+
+    /// <summary>
+    /// The answer to an empty POST after a GET got 404: the endpoint exists unless the POST gets 404 too. An error such
+    /// as 400 is the expected answer to a request that is no AS2 message.
+    /// </summary>
+    public static (bool Success, string Message) EvaluateProbe(HttpStatusCode status, string? reason, Connection connection)
+    {
+        var code = $"HTTP {(int)status}{(string.IsNullOrWhiteSpace(reason) ? "" : " " + reason)}";
+        return status switch
+        {
+            HttpStatusCode.NotFound => (false, $"The URL does not exist at the partner (HTTP 404 to GET and to POST, {code}); check the path."),
+            HttpStatusCode.Unauthorized or HttpStatusCode.ProxyAuthenticationRequired or HttpStatusCode.Forbidden =>
+                EvaluateResponse(status, reason, connection),
+            _ => (true, $"The endpoint answers GET with HTTP 404, but exists: an empty POST, which is no AS2 message, got {code}. Nothing was sent."),
         };
     }
 

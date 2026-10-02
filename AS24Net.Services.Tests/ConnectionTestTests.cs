@@ -157,6 +157,37 @@ public class ConnectionTestTests
         Assert.Equal(status, result.HttpStatus);
     }
 
+    [Theory]
+    [InlineData(400, ConnectionTestStage.Completed, true)]
+    [InlineData(404, ConnectionTestStage.Http, false)]
+    [InlineData(401, ConnectionTestStage.Http, false)]
+    public async Task Run_TriesAnEmptyPost_WhenGetGets404(int postStatus, ConnectionTestStage stage, bool success)
+    {
+        var port = FreePort();
+        using var listener = new HttpListener();
+        listener.Prefixes.Add($"http://localhost:{port}/");
+        listener.Start();
+        var requests = new List<(string Method, long Length)>();
+        var serve = Task.Run(async () =>
+        {
+            for (var i = 0; i < 2; i++)
+            {
+                var context = await listener.GetContextAsync();
+                requests.Add((context.Request.HttpMethod, context.Request.ContentLength64));
+                context.Response.StatusCode = context.Request.HttpMethod == "GET" ? 404 : postStatus;
+                context.Response.Close();
+            }
+        });
+
+        var result = await RunAsync($"http://localhost:{port}/");
+        await serve;
+
+        Assert.Equal([("GET", 0L), ("POST", 0L)], requests);
+        Assert.Equal(stage, result.Stage);
+        Assert.Equal(success, result.Success);
+        Assert.Equal(postStatus, result.HttpStatus);
+    }
+
     [Fact]
     public async Task Run_ReportsAClosedPort()
     {

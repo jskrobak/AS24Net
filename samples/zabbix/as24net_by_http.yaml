@@ -404,7 +404,7 @@ zabbix_export:
               preprocessing:
                 - type: JSONPATH
                   parameters:
-                    - '$.partners[?(@.as2Id==''{#AS2ID}'')].awaitingEndResponse.first()'
+                    - '$.partners[?(@.as2Id==''{#AS2ID}'')].awaitingMdn.first()'
               master_item:
                 key: as2.send-queue
               tags:
@@ -423,7 +423,7 @@ zabbix_export:
               preprocessing:
                 - type: JSONPATH
                   parameters:
-                    - '$.partners[?(@.as2Id==''{#AS2ID}'')].oldestAwaitingEndResponseMinutes.first()'
+                    - '$.partners[?(@.as2Id==''{#AS2ID}'')].oldestAwaitingMdnMinutes.first()'
                 - type: MULTIPLIER
                   parameters:
                     - '60'

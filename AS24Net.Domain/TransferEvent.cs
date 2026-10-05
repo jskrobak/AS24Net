@@ -54,6 +54,9 @@ public enum TransferEventType
 
     /// <summary>A connection test: the partner's endpoint was reached, nothing was sent.</summary>
     ConnectionTested,
+
+    /// <summary>An administrator marked a refused message as resolved.</summary>
+    RefusalResolved,
 }
 
 /// <summary>

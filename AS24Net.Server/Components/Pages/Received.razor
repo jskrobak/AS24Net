@@ -32,6 +32,7 @@
                 @Row("MDN error", selected.MdnLastError)
                 @Row("Fetched through the API", selected.FetchedDate?.ToString("G"))
                 @Row("File", selected.FilePath, code: true)
+                @Row("Resolved", Resolution(selected))
             </dl>
             @if (!string.IsNullOrEmpty(selected.Error))
             {
@@ -40,6 +41,13 @@
         }
     </BodyTemplate>
     <FooterTemplate>
+        @if (selected is { Status: ReceivedStatus.Failed, ResolvedDate: null })
+        {
+            <HxInputText @bind-Value="resolutionNote" Placeholder="Note, e.g. sent again from the new connection" CssClass="flex-grow-1 me-2" />
+            <HxButton Text="Mark as resolved" Color="ThemeColor.Primary" Icon="BootstrapIcon.CheckCircle"
+                      OnClick="HandleResolveAsync"
+                      Tooltip="The refusal no longer degrades the health check of the server." />
+        }
         @if (selected?.FilePath is not null)
         {
             <a class="btn btn-primary" href="@($"received/{selected.Id}/download")">Download</a>
@@ -87,6 +95,10 @@
                         @if (m.FetchedDate is not null)
                         {
                             <HxBadge Color="ThemeColor.Light" CssClass="ms-1">fetched</HxBadge>
+                        }
+                        @if (m.ResolvedDate is not null)
+                        {
+                            <HxBadge Color="ThemeColor.Light" CssClass="ms-1">resolved</HxBadge>
                         }
                     </ItemTemplate>
                 </HxGridColumn>

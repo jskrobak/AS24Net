@@ -114,4 +114,29 @@ public class ReceivedMessage
 
     /// <summary>When the file was fetched through the REST API.</summary>
     public DateTime? FetchedDate { get; set; }
+
+    /// <summary>
+    /// When an administrator marked the refused message as resolved (e.g. the partner sent it again); a resolved
+    /// refusal no longer degrades the health check <c>messages</c>.
+    /// </summary>
+    public DateTime? ResolvedDate { get; set; }
+
+    [StringLength(200)]
+    public string? ResolvedBy { get; set; }
+
+    [StringLength(500)]
+    public string? ResolutionNote { get; set; }
+
+    /// <summary>Marks the refused message as resolved; only a refused message can be, and only once.</summary>
+    public void Resolve(DateTime now, string? resolvedBy, string? note)
+    {
+        if (Status != ReceivedStatus.Failed)
+            throw new InvalidOperationException("Only a refused message can be marked as resolved.");
+        if (ResolvedDate is not null)
+            throw new InvalidOperationException($"The message was marked as resolved already on {ResolvedDate:g}.");
+
+        ResolvedDate = now;
+        ResolvedBy = string.IsNullOrWhiteSpace(resolvedBy) ? null : resolvedBy.Trim();
+        ResolutionNote = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+    }
 }

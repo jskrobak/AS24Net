@@ -88,7 +88,7 @@ public class ReceivedMessageRepository(
         .CountAsync(cancellationToken);
 
     public Task<int> CountFailedAsync(DateTime since, CancellationToken cancellationToken = default) => Data
-        .Where(m => m.Status == ReceivedStatus.Failed && m.Created >= since)
+        .Where(m => m.Status == ReceivedStatus.Failed && m.ResolvedDate == null && m.Created >= since)
         .CountAsync(cancellationToken);
 
     public Task<List<ReceivedMessage>> GetFinishedAsync(DateTime createdBefore, int take, CancellationToken cancellationToken = default) => Data

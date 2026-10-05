@@ -148,6 +148,16 @@ public class As2EventNotifier(
         Global(Payload(message, MessageRefusedEvent, error));
     }
 
+    /// <summary>An administrator marked a refused message as resolved; recorded only, no hook or webhook.</summary>
+    public void RefusalResolved(ReceivedMessage message)
+    {
+        Record(TransferEventCategory.Incoming, TransferEventType.RefusalResolved, TransferEventLevel.Information,
+            $"Refused message {message.MessageId} from {message.As2From} marked as resolved" +
+            (message.ResolvedBy is null ? "" : $" by {message.ResolvedBy}") +
+            (message.ResolutionNote is null ? "" : $": {message.ResolutionNote}"),
+            message.Partner, message.As2From, e => Describe(e, message));
+    }
+
     public void MdnSent(ReceivedMessage message, bool async, string? error = null, bool willRetry = false)
     {
         Record(TransferEventCategory.Mdn, error is null ? TransferEventType.MdnSent : TransferEventType.MdnSendFailed,

@@ -1,5 +1,7 @@
+using Havit.Blazor.Components.Web;
 using Havit.Blazor.Components.Web.Bootstrap;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using AS24Net.DataLayer.Filters;
 using AS24Net.Domain;
 using AS24Net.Services;
@@ -9,6 +11,8 @@ namespace AS24Net.Server.Components.Pages;
 public partial class Received : ComponentBase
 {
     [Inject] protected IDataService DataService { get; set; } = null!;
+    [Inject] protected IHxMessengerService Messenger { get; set; } = null!;
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = null!;
 
     private static readonly ReceivedStatus[] statuses = Enum.GetValues<ReceivedStatus>();
 
@@ -16,6 +20,7 @@ public partial class Received : ComponentBase
     private HxGrid<ReceivedMessage> gridComponent = null!;
     private HxModal detailModal = null!;
     private ReceivedMessage? selected;
+    private string? resolutionNote;
 
     private async Task<GridDataProviderResult<ReceivedMessage>> GetGridData(GridDataProviderRequest<ReceivedMessage> request)
     {
@@ -26,9 +31,31 @@ public partial class Received : ComponentBase
     private async Task HandleSelectedAsync(ReceivedMessage? message)
     {
         selected = message;
+        resolutionNote = null;
         if (selected is not null)
             await detailModal.ShowAsync();
     }
+
+    private async Task HandleResolveAsync()
+    {
+        if (selected is null)
+            return;
+
+        try
+        {
+            selected = await DataService.ResolveRefusedMessageAsync(selected.Id, AuthenticationState.Result.User.Identity?.Name, resolutionNote);
+            Messenger.AddInformation("The refused message is marked as resolved.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Messenger.AddError(ex.Message);
+        }
+        await gridComponent.RefreshDataAsync();
+    }
+
+    private static string? Resolution(ReceivedMessage m) => m.ResolvedDate is null
+        ? null
+        : $"{m.ResolvedDate:G}" + (m.ResolvedBy is null ? "" : $" by {m.ResolvedBy}") + (m.ResolutionNote is null ? "" : $": {m.ResolutionNote}");
 
     private static string Security(ReceivedMessage m)
     {

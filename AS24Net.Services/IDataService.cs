@@ -59,4 +59,10 @@ public interface IDataService
 
     Task<ReceivedMessage?> GetReceivedMessageAsync(int id);
     Task MarkReceivedMessageFetchedAsync(ReceivedMessage message);
+
+    /// <summary>
+    /// Marks a refused message as resolved, so that it no longer degrades the health check; throws
+    /// <see cref="InvalidOperationException"/> when the message was not refused or is resolved already.
+    /// </summary>
+    Task<ReceivedMessage> ResolveRefusedMessageAsync(int id, string? resolvedBy, string? note);
 }

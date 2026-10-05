@@ -414,7 +414,7 @@ readinessProbe:
 | `send-service` | the service stopped or has not processed the queue for three send intervals and a minute; degraded while paused |
 | `certificates` | degraded: a certificate in use (identities, connections with an enabled partner, our certificates of enabled partners) expired or expires within 30 days, unless a scheduled change replaces it in time |
 | `certificate-changes` | degraded: a scheduled change is more than 10 minutes overdue, its certificate expires before its time, or a change failed within 7 days |
-| `messages` | degraded: a message waits to be sent for more than 24 hours, failed or was not delivered in the last 24 hours, an asynchronous MDN of ours is still being retried after an hour or was given up for a message received in the last 24 hours, or a message of a partner was refused in the last 24 hours |
+| `messages` | degraded: a message waits to be sent for more than 24 hours, failed or was not delivered in the last 24 hours, an asynchronous MDN of ours is still being retried after an hour or was given up for a message received in the last 24 hours, or a message of a partner was refused in the last 24 hours and not marked as resolved |
 | `internal-queues` | degraded: the queue of the transfer log, the webhooks or the hooks is 80 % full and about to drop items |
 | `retention` | degraded: the nightly removal of old data failed or has not run for two days |
 
@@ -422,6 +422,14 @@ The checks read the state the services keep and the database; none of them conne
 runs them every 30 seconds, shows the result on the dashboard and writes every change to the log. With
 `HealthChecks:WebhookUrl` configured, every change is also posted as the webhook `health.changed` with the overall
 state in `status` and the checks that are not healthy in `error`.
+
+### Refused messages
+
+A message a partner sent that could not be processed (unknown partner, wrong certificate, …) is stored as *Failed* in
+*Received* and degrades the check `messages` for 24 hours. When the cause is dealt with, e.g. the partner sent the
+message again from its new connection, open the message in *Received* and click *Mark as resolved*, with a note if
+useful: the refusal no longer counts, the list shows it as *resolved*, and *Logs → Incoming* records who resolved it
+(`RefusalResolved`).
 
 ### Messages that are not sent
 

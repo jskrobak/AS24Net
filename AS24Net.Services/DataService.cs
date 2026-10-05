@@ -8,6 +8,7 @@ using AS24Net.DataLayer.Filters;
 using AS24Net.DataLayer.Repositories;
 using AS24Net.Domain;
 using AS24Net.Services.As2;
+using AS24Net.Services.Events;
 
 namespace AS24Net.Services;
 
@@ -21,7 +22,8 @@ public class DataService(
     ICertificateChangeRepository changeRepository,
     IUnitOfWork unitOfWork,
     ITimeService timeService,
-    As2HttpClientProvider httpClients) : IDataService
+    As2HttpClientProvider httpClients,
+    As2EventNotifier notifier) : IDataService
 {
     public Task<DataFragment<Connection>> GetConnectionsDataFragmentAsync(ConnectionFilter filter, GridDataProviderRequest<Connection> request,
         CancellationToken cancellationToken = default) => connectionRepository.GetFragmentAsync(filter, request, cancellationToken);
@@ -244,5 +246,17 @@ public class DataService(
         message.FetchedDate = timeService.GetCurrentTime();
         unitOfWork.AddForUpdate(message);
         await unitOfWork.CommitAsync();
+    }
+
+    public async Task<ReceivedMessage> ResolveRefusedMessageAsync(int id, string? resolvedBy, string? note)
+    {
+        var message = await receivedRepository.FindWithRefsAsync(id)
+            ?? throw new InvalidOperationException($"Received message {id} does not exist.");
+        message.Resolve(timeService.GetCurrentTime(), resolvedBy, note);
+        unitOfWork.AddForUpdate(message);
+        await unitOfWork.CommitAsync();
+
+        notifier.RefusalResolved(message);
+        return message;
     }
 }

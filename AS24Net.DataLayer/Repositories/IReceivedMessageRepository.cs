@@ -28,7 +28,7 @@ public interface IReceivedMessageRepository : IRepository<ReceivedMessage, int>
     /// <summary>Asynchronous MDNs given up after the retries, for messages received since the given time.</summary>
     Task<int> CountMdnsFailedAsync(DateTime receivedSince, CancellationToken cancellationToken = default);
 
-    /// <summary>Messages refused since the given time.</summary>
+    /// <summary>Messages refused since the given time and not marked as resolved.</summary>
     Task<int> CountFailedAsync(DateTime since, CancellationToken cancellationToken = default);
 
     /// <summary>Messages that need nothing more (their MDN is sent), received before the given time; the oldest first.</summary>

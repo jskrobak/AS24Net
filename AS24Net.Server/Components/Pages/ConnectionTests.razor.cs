@@ -47,6 +47,19 @@ public partial class ConnectionTests : ComponentBase, IDisposable
     private async Task LoadPartnersAsync() =>
         partners = (await DataService.GetAllPartnersAsync()).OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
 
+    #region Sending a test message
+
+    private HxModal testMessageModal = null!;
+    private Partner? testMessagePartner;
+
+    private async Task SendTestMessageAsync(Partner partner)
+    {
+        testMessagePartner = partner;
+        await testMessageModal.ShowAsync();
+    }
+
+    #endregion
+
     #region Changing a partner or a connection and testing again
 
     private HxModal partnerEditModal = null!;

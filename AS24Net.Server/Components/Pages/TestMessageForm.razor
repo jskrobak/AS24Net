@@ -1,0 +1,175 @@
+@using AS24Net.Domain
+@using AS24Net.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@implements IDisposable
+
+@* Sends a short test message to a partner and follows it to its MDN. *@
+<p class="small text-body-secondary">
+    The message goes through the send queue with the connection's settings (signing, encryption, MDN) as any other
+    message, as <code>@TestMessageService.ContentType</code>. Tell the partner first: its system may report a message it
+    cannot process as an error.
+</p>
+
+<div class="mb-3">
+    <label class="form-label">To</label>
+    <div>@Partner.Name (@Partner.As2Id)</div>
+</div>
+<div class="mb-3">
+    <label class="form-label">Send as identity</label>
+    <select class="form-select" value="@(request.IdentityId?.ToString() ?? "")"
+            @onchange="e => request.IdentityId = int.TryParse((string?)e.Value, out var id) ? id : null">
+        <option value="">-the partner's default identity-</option>
+        @foreach (var identity in Identities)
+        {
+            <option value="@identity.Id">@identity.Name (@identity.As2Id)</option>
+        }
+    </select>
+</div>
+<div class="row g-3 mb-3">
+    <div class="col-md-5">
+        <label class="form-label">File name</label>
+        <input class="form-control" maxlength="250" @bind="request.FileName" />
+    </div>
+    <div class="col-md-7">
+        <label class="form-label">Subject</label>
+        <input class="form-control" maxlength="200" @bind="request.Subject" />
+    </div>
+</div>
+<div class="mb-3">
+    <label class="form-label">Content</label>
+    <textarea class="form-control" rows="3" @bind="request.Content"></textarea>
+</div>
+@if (problem is not null)
+{
+    <HxAlert Color="ThemeColor.Danger" CssClass="py-2 small">@problem</HxAlert>
+}
+<HxButton Color="ThemeColor.Primary" Icon="BootstrapIcon.Send" Spinner="sending" Enabled="!sending"
+          OnClick="SendAsync">Send test message</HxButton>
+
+@if (message is not null)
+{
+    <hr />
+    <div class="d-flex align-items-center gap-2">
+        <HxBadge Color="@StatusColor(message.Status)">@message.Status</HxBadge>
+        <span class="small">Message @message.Id – @StatusText(message)</span>
+        @if (following)
+        {
+            <HxSpinner Size="SpinnerSize.Small" Color="ThemeColor.Secondary" />
+        }
+    </div>
+    @if (!string.IsNullOrEmpty(message.LastError))
+    {
+        <div class="small text-danger mt-1">@message.LastError</div>
+    }
+    @if (!string.IsNullOrEmpty(message.MdnText))
+    {
+        <div class="small text-body-secondary mt-1">MDN: @message.MdnDisposition @message.MdnText</div>
+    }
+    <div class="small mt-1"><a href="Outgoing">Outgoing messages</a> · <a href="Logs/outgoing">Logs</a></div>
+}
+
+@code {
+    [Inject] protected TestMessageService TestMessages { get; set; } = null!;
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    [Parameter, EditorRequired] public Partner Partner { get; set; } = null!;
+
+    [Parameter, EditorRequired] public IReadOnlyList<Identity> Identities { get; set; } = [];
+
+    private TestMessageRequest request = new();
+    private OutgoingMessage? message;
+    private string? problem;
+    private bool sending;
+    private bool following;
+    private CancellationTokenSource? follow;
+    private int? shownFor;
+
+    protected override void OnParametersSet()
+    {
+        // A new form only for another partner: the parent renders again while a message is being followed.
+        if (shownFor == Partner.Id)
+            return;
+        shownFor = Partner.Id;
+
+        request = new TestMessageRequest { PartnerId = Partner.Id, IdentityId = Partner.DefaultIdentityId };
+        message = null;
+        problem = null;
+        follow?.Cancel();
+    }
+
+    private async Task SendAsync()
+    {
+        problem = TestMessageService.Validate(request);
+        if (problem is not null)
+            return;
+
+        sending = true;
+        try
+        {
+            var user = AuthenticationState is null ? null : (await AuthenticationState).User.Identity?.Name;
+            message = await TestMessages.QueueAsync(request, user);
+        }
+        catch (Exception ex)
+        {
+            problem = $"The test message could not be queued: {ex.Message}";
+            return;
+        }
+        finally
+        {
+            sending = false;
+        }
+
+        _ = FollowAsync(message.Id);
+    }
+
+    /// <summary>Shows the state of the message until the partner answers, for at most ten minutes.</summary>
+    private async Task FollowAsync(int id)
+    {
+        follow?.Cancel();
+        var cts = follow = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        following = true;
+        try
+        {
+            while (!cts.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(3), cts.Token);
+                if (await TestMessages.GetAsync(id, cts.Token) is { } current)
+                {
+                    message = current;
+                    await InvokeAsync(StateHasChanged);
+                    if (current.Status is OutgoingStatus.Delivered or OutgoingStatus.NotDelivered or OutgoingStatus.Failed)
+                        break;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            following = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static ThemeColor StatusColor(OutgoingStatus status) => status switch
+    {
+        OutgoingStatus.Delivered => ThemeColor.Success,
+        OutgoingStatus.Sent => ThemeColor.Info,
+        OutgoingStatus.New => ThemeColor.Secondary,
+        OutgoingStatus.Error => ThemeColor.Warning,
+        _ => ThemeColor.Danger,
+    };
+
+    private static string StatusText(OutgoingMessage message) => message.Status switch
+    {
+        OutgoingStatus.New => "waiting for the send service",
+        OutgoingStatus.Error => $"failed, retried at {message.NextRetry:g} (attempt {message.RetryCount})",
+        OutgoingStatus.Sent => $"accepted by the partner {message.SentDate:g}, waiting for its MDN",
+        OutgoingStatus.Delivered => $"delivered {message.DeliveredDate:g}",
+        OutgoingStatus.NotDelivered => "the partner answered with a negative MDN",
+        _ => "failed for good",
+    };
+
+    public void Dispose() => follow?.Cancel();
+}

@@ -130,5 +130,14 @@ public partial class Partners : ComponentBase
         await connectionTestModal.ShowAsync();
     }
 
+    private HxModal testMessageModal = null!;
+    private Partner? testMessagePartner;
+
+    private async Task HandleSendTestMessageClick(Partner partner)
+    {
+        testMessagePartner = partner;
+        await testMessageModal.ShowAsync();
+    }
+
     #endregion
 }

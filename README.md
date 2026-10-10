@@ -667,6 +667,12 @@ A connection test checks a partner without sending it anything, e.g. after it mo
 certificate or when a message does not go through. *Partners → Test connection* tests one partner as an identity of
 choice, *Partners → Connection tests* all of them one after another (or only those that failed last time).
 
+A connection test sends nothing. To see that a message really arrives, *Send test message* in the menu of a partner
+(also the envelope on *Connection tests*) sends a short `text/plain` message (`test.txt`, subject "Test from artipa",
+content "This is test from artipa. support@artipa.com"; all can be changed) through the send queue with the
+connection's signing, encryption and MDN settings, and follows it until it is `Delivered` or refused. Tell the partner
+first: its system may report a message it cannot process as an error.
+
 | Step | Checked | Fails when |
 |---|---|---|
 | Configuration | the certificates the messages need, the public URL for an asynchronous MDN | a certificate that is used is missing, expired, not valid yet or has no private key (the test goes on and reports it) |

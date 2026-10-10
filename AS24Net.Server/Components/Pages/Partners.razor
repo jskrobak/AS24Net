@@ -20,6 +20,16 @@
     </BodyTemplate>
 </HxModal>
 
+<HxModal @ref="testMessageModal" ShowCloseButton="true" Size="ModalSize.Large">
+    <HeaderTemplate>Send a test message to @testMessagePartner?.Name</HeaderTemplate>
+    <BodyTemplate>
+        @if (testMessagePartner is not null)
+        {
+            <TestMessageForm Partner="testMessagePartner" Identities="identities" />
+        }
+    </BodyTemplate>
+</HxModal>
+
 <HxModal @ref="connectionTestModal" ShowCloseButton="true" Size="ModalSize.Large">
     <HeaderTemplate>
         Test the connection to @connectionTestPartner?.Name
@@ -82,6 +92,7 @@
                         <HxContextMenuItem Text="Edit" Icon="BootstrapIcon.Pen" OnClick="async () => await HandleSelectedAsync(partner)" />
                         <HxContextMenuItem Text="Send a file" Icon="BootstrapIcon.Send" OnClick="@(() => Navigation.NavigateTo($"Outgoing?partner={partner.Id}"))" />
                         <HxContextMenuItem Text="Test connection" Icon="BootstrapIcon.Plug" OnClick="async () => await HandleTestConnectionClick(partner)" />
+                        <HxContextMenuItem Text="Send test message" Icon="BootstrapIcon.EnvelopeCheck" OnClick="async () => await HandleSendTestMessageClick(partner)" />
                         <HxContextMenuItem Text="Schedule a certificate" Icon="BootstrapIcon.CalendarPlus" OnClick="@(() => Navigation.NavigateTo($"CertificateChanges?connection={partner.ConnectionId}"))" />
                         <HxContextMenuItem Text="Delete" Icon="BootstrapIcon.Trash" OnClick="async () => await HandleDeleteClick(partner)"
                                            ConfirmationQuestion="@($"Delete partner {partner.Name}? Its outgoing messages are deleted too.")"/>

@@ -171,6 +171,7 @@ builder.Services.AddScoped<SelfSignedCertificateService>();
 builder.Services.AddScoped<LoopbackSeedService>();
 builder.Services.AddScoped<ApiTokenService>();
 builder.Services.AddScoped<MessageQueueService>();
+builder.Services.AddScoped<TestMessageService>();
 builder.Services.AddScoped<As2Sender>();
 builder.Services.AddScoped<As2InboundService>();
 builder.Services.AddScoped<CertificateChangeService>();

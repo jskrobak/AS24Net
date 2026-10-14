@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
+using AS24Net.Domain;
 using AS24Net.Services.Api;
 
 namespace AS24Net.Server.Api;
@@ -21,11 +22,11 @@ public sealed class ApiTokenAuthenticationHandler(
     /// <summary>Name of the token that authenticated the request.</summary>
     public const string TokenNameClaim = "as24net:token";
 
-    /// <summary>Present with the value <c>true</c> when the token may change the configuration.</summary>
-    public const string ConfigurationClaim = "as24net:configuration";
+    /// <summary>One claim per scope of the token (<see cref="ApiTokenScopes"/>), with the name of the scope.</summary>
+    public const string ScopeClaim = "as24net:scope";
 
-    /// <summary>Policy of the endpoints that change the configuration.</summary>
-    public const string ConfigurationPolicy = "ApiConfiguration";
+    /// <summary>Policy of the endpoints that need the scope.</summary>
+    public static string PolicyFor(ApiTokenScopes scope) => "ApiScope:" + scope;
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
@@ -44,8 +45,7 @@ public sealed class ApiTokenAuthenticationHandler(
         }
 
         List<Claim> claims = [new Claim(ClaimTypes.Name, token.Name), new Claim(TokenNameClaim, token.Name)];
-        if (token.AllowConfiguration)
-            claims.Add(new Claim(ConfigurationClaim, "true"));
+        claims.AddRange(token.Scopes.Effective().Each().Select(scope => new Claim(ScopeClaim, scope.ToString())));
         var identity = new ClaimsIdentity(claims, SchemeName);
         return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName));
     }

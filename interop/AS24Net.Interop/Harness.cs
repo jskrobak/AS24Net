@@ -96,9 +96,10 @@ public sealed class Harness : IDisposable
         Console.WriteLine($"Starting {list} (the first build takes a few minutes) ...");
         await ComposeAsync($"up -d --build --wait --wait-timeout 600 {list}");
 
+        // Scopes 15: all of them (ApiTokenScopes).
         await SqlAsync($"""
-            INSERT INTO "ApiTokens" ("Name", "Prefix", "TokenHash", "Enabled", "AllowConfiguration", "Created")
-            SELECT 'interop', '{Token[..12]}', '{Hash(Token)}', true, true, now()
+            INSERT INTO "ApiTokens" ("Name", "Prefix", "TokenHash", "Enabled", "Scopes", "Created")
+            SELECT 'interop', '{Token[..12]}', '{Hash(Token)}', true, 15, now()
             WHERE NOT EXISTS (SELECT 1 FROM "ApiTokens" WHERE "TokenHash" = '{Hash(Token)}');
             """);
         var settings = new Dictionary<string, object>

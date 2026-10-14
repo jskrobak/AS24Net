@@ -24,8 +24,8 @@ public static class ApiEndpoints
             .RequireAuthorization(new AuthorizeAttribute { AuthenticationSchemes = ApiTokenAuthenticationHandler.SchemeName })
             .WithTags("AS24Net");
 
-        MapMessages(api, app);
-        MapInbox(api);
+        MapMessages(api.MapGroup("").RequireAuthorization(ApiTokenAuthenticationHandler.PolicyFor(ApiTokenScopes.Messages)), app);
+        MapInbox(api.MapGroup("").RequireAuthorization(ApiTokenAuthenticationHandler.PolicyFor(ApiTokenScopes.Inbox)));
         MapPartners(api);
         api.MapConfiguration();
         MapStatus(api);
@@ -263,11 +263,14 @@ public static class ApiEndpoints
 
     private static void MapPartners(RouteGroupBuilder api)
     {
+        // Reading is open to every token; testing and changing certificates need the scope Certificates.
+        var certificates = api.MapGroup("").RequireAuthorization(ApiTokenAuthenticationHandler.PolicyFor(ApiTokenScopes.Certificates));
+
         api.MapGet("/partners", async (IPartnerRepository repository, CancellationToken cancellationToken) =>
                 Results.Ok((await repository.GetAllWithConnectionAsync(cancellationToken)).Select(PartnerDto.From).ToList()))
             .WithSummary("Lists partners messages can be sent to, with the contacts of their connections.");
 
-        api.MapPost("/partners/{partner}/connection-test", async (string partner, string? identity,
+        certificates.MapPost("/partners/{partner}/connection-test", async (string partner, string? identity,
                 IPartnerRepository partners, IIdentityRepository identities, ConnectionTestService tests,
                 CancellationToken cancellationToken) =>
             {
@@ -315,7 +318,7 @@ public static class ApiEndpoints
                     : Results.NotFound(new ApiError($"Unknown partner '{partner}'.")))
             .WithSummary("Certificate changes of the connection of a partner, scheduled and past.");
 
-        api.MapPost("/connections/{connection}/certificate-changes", async (
+        certificates.MapPost("/connections/{connection}/certificate-changes", async (
                 string connection,
                 IFormFile file,
                 [FromForm] PartnerCertificateUsage? usage,
@@ -336,7 +339,7 @@ public static class ApiEndpoints
             .WithSummary("Uploads a new certificate of the partners of the connection (.cer, .crt, .pem) to be used from activateAt.")
             .WithDescription(ScheduleDescription);
 
-        api.MapPost("/partners/{partner}/certificate-changes", async (
+        certificates.MapPost("/partners/{partner}/certificate-changes", async (
                 string partner,
                 IFormFile file,
                 [FromForm] PartnerCertificateUsage? usage,
@@ -358,7 +361,7 @@ public static class ApiEndpoints
             .WithDescription(ScheduleDescription + " The certificate belongs to the connection of the partner, so it is used for all the " +
                              "partners of the connection.");
 
-        api.MapDelete("/certificate-changes/{id:int}", async (int id, HttpContext httpContext, ICertificateChangeRepository changes,
+        certificates.MapDelete("/certificate-changes/{id:int}", async (int id, HttpContext httpContext, ICertificateChangeRepository changes,
                 CertificateChangeService service, CancellationToken cancellationToken) =>
             {
                 if ((await changes.GetAllAsync(cancellationToken)).All(c => c.Id != id))

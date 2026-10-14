@@ -16,6 +16,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using AS24Net.DependencyInjection;
+using AS24Net.Domain;
 using AS24Net.Server;
 using AS24Net.Server.Api;
 using AS24Net.Server.Components;
@@ -134,10 +135,11 @@ builder.Services.AddAuthorization(options =>
 {
     // Everything except the login page and static files requires a signed in user.
     options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
-    // API tokens allowed to change connections, partners, identities and certificates.
-    options.AddPolicy(ApiTokenAuthenticationHandler.ConfigurationPolicy, policy => policy
-        .AddAuthenticationSchemes(ApiTokenAuthenticationHandler.SchemeName)
-        .RequireClaim(ApiTokenAuthenticationHandler.ConfigurationClaim, "true"));
+    // API tokens with a scope: sending messages, fetching received ones, certificate changes, the configuration.
+    foreach (var scope in ApiTokenScopesExtensions.All)
+        options.AddPolicy(ApiTokenAuthenticationHandler.PolicyFor(scope), policy => policy
+            .AddAuthenticationSchemes(ApiTokenAuthenticationHandler.SchemeName)
+            .RequireClaim(ApiTokenAuthenticationHandler.ScopeClaim, scope.ToString()));
 });
 builder.Services.AddCascadingAuthenticationState();
 

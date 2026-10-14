@@ -25,11 +25,8 @@ public class ApiToken
 
     public bool Enabled { get; set; } = true;
 
-    /// <summary>
-    /// The token may change the configuration through the API: connections, partners, identities and certificates
-    /// (e.g. for an import from another AS2 server).
-    /// </summary>
-    public bool AllowConfiguration { get; set; }
+    /// <summary>What the token may do besides reading, see <see cref="ApiTokenScopes"/>.</summary>
+    public ApiTokenScopes Scopes { get; set; } = ApiTokenScopes.Default;
 
     public DateTime Created { get; set; } = DateTime.Now;
     public DateTime? ExpiresAt { get; set; }

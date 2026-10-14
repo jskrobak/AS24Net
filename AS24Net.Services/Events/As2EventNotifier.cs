@@ -331,7 +331,7 @@ public class As2EventNotifier(
         {
             using var scope = serviceScopeFactory.CreateScope();
             var tokens = await scope.ServiceProvider.GetRequiredService<IApiTokenRepository>().GetAllAsync();
-            foreach (var token in tokens.Where(t => t.Enabled && !string.IsNullOrEmpty(t.InboxWebhookUrl)))
+            foreach (var token in tokens.Where(ApiTokenService.NotifiedAboutReceivedMessages))
                 webhooks.Dispatch(token.InboxWebhookUrl!, token.WebhookSecret, payload);
         }
         catch (Exception ex)

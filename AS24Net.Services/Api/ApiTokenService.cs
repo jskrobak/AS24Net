@@ -16,12 +16,14 @@ public class ApiTokenService(
     public const string TokenPrefix = "a24_";
 
     /// <summary>Creates a token and returns it; this is the only time the full token is available.</summary>
-    public async Task<(ApiToken Token, string Value)> CreateAsync(string name, DateTime? expiresAt = null,
-        string? inboxWebhookUrl = null, string? webhookSecret = null, bool allowConfiguration = false,
-        CancellationToken cancellationToken = default)
+    /// <param name="scopes">What the token may do besides reading; <see cref="ApiTokenScopes.None"/> reads only (e.g. for the monitoring).</param>
+    public async Task<(ApiToken Token, string Value)> CreateAsync(string name, ApiTokenScopes scopes, DateTime? expiresAt = null,
+        string? inboxWebhookUrl = null, string? webhookSecret = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new InvalidOperationException("The token needs a name.");
+        if (!string.IsNullOrWhiteSpace(inboxWebhookUrl) && !scopes.HasFlag(ApiTokenScopes.Inbox))
+            throw new InvalidOperationException("An inbox webhook needs the scope Inbox: received messages are not shown to the token otherwise.");
 
         var value = TokenPrefix + Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
         var token = new ApiToken
@@ -33,7 +35,7 @@ public class ApiTokenService(
             ExpiresAt = expiresAt,
             InboxWebhookUrl = string.IsNullOrWhiteSpace(inboxWebhookUrl) ? null : inboxWebhookUrl.Trim(),
             WebhookSecret = string.IsNullOrWhiteSpace(webhookSecret) ? null : webhookSecret,
-            AllowConfiguration = allowConfiguration,
+            Scopes = scopes,
         };
 
         unitOfWork.AddForInsert(token);
@@ -69,11 +71,15 @@ public class ApiTokenService(
     public async Task<List<ApiToken>> GetAllAsync() =>
         (await tokenRepository.GetAllAsync()).OrderBy(t => t.Name).ToList();
 
-    /// <summary>Enabled tokens with an inbox webhook, notified about received messages.</summary>
+    /// <summary>Enabled tokens with the scope Inbox and an inbox webhook, notified about received messages.</summary>
     public async Task<List<ApiToken>> GetInboxWebhooksAsync(CancellationToken cancellationToken = default) =>
         (await tokenRepository.GetAllAsync(cancellationToken))
-        .Where(t => t.Enabled && !string.IsNullOrEmpty(t.InboxWebhookUrl))
+        .Where(NotifiedAboutReceivedMessages)
         .ToList();
+
+    /// <summary>The token's inbox webhook is called about a received message.</summary>
+    public static bool NotifiedAboutReceivedMessages(ApiToken token) =>
+        token.Enabled && token.Scopes.HasFlag(ApiTokenScopes.Inbox) && !string.IsNullOrEmpty(token.InboxWebhookUrl);
 
     public async Task SaveAsync(ApiToken token)
     {

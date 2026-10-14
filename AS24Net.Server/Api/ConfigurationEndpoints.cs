@@ -7,7 +7,8 @@ namespace AS24Net.Server.Api;
 
 /// <summary>
 /// Connections, partners, identities and certificates through the REST API, e.g. for an import from another AS2
-/// server. Reading the connections is open to every token; the rest only to tokens that may change the configuration.
+/// server. Reading the connections is open to every token, listing the certificates to tokens with the scope
+/// Certificates; the rest only to tokens with the scope Configuration.
 /// The PUT endpoints create the record or update the one with the same key, so an import can be run again; a
 /// property that is left out (or null) keeps its value.
 /// </summary>
@@ -20,9 +21,11 @@ public static class ConfigurationEndpoints
             .WithSummary("Lists the connections: the servers of the partners with their security settings and certificates.");
 
         var configuration = api.MapGroup("")
-            .RequireAuthorization(ApiTokenAuthenticationHandler.ConfigurationPolicy);
+            .RequireAuthorization(ApiTokenAuthenticationHandler.PolicyFor(ApiTokenScopes.Configuration));
 
-        configuration.MapGet("/certificates", async (ICertificateRepository repository, CancellationToken cancellationToken) =>
+        // Configuration includes Certificates (ApiTokenScopes.Effective), so one policy covers both.
+        api.MapGroup("").RequireAuthorization(ApiTokenAuthenticationHandler.PolicyFor(ApiTokenScopes.Certificates))
+            .MapGet("/certificates", async (ICertificateRepository repository, CancellationToken cancellationToken) =>
                 Results.Ok((await repository.GetAllAsync(cancellationToken)).OrderBy(c => c.Name).Select(CertificateDto.From).ToList()))
             .WithSummary("Lists the stored certificates, without their data.");
 

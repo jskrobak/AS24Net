@@ -555,6 +555,20 @@ Integrations can use a REST API authenticated with a bearer token: `Authorizatio
 Tokens are created in *Settings → API tokens* and shown only once (only their hash is stored); they can be disabled,
 deleted and given an expiry date.
 
+Every token reads partners, identities, connections, certificate changes, the transfer log, the status and the
+health checks. Anything else needs a scope of the token; a request without it gets `403`:
+
+| Scope | Allows | E.g. for |
+|---|---|---|
+| *(none)* | reading only | the monitoring (Zabbix) |
+| `Messages` | `/messages`: sending, reading, retrying and removing messages | an ERP |
+| `Inbox` | `/inbox`: fetching received messages; the token's inbox webhook is called only with it | an ERP |
+| `Certificates` | `GET /certificates`, scheduling and cancelling certificate changes, `connection-test` | an agent that keeps the partners' certificates up to date |
+| `Configuration` | setting up connections, partners, identities and certificates; includes `Certificates` | an import from another AS2 server |
+
+Tokens created before the scopes have `Messages`, `Inbox` and `Certificates`, and `Configuration` when they were
+allowed to change the configuration.
+
 *Settings → REST API* shows the interactive documentation (Scalar) with request examples in several languages;
 the OpenAPI description itself is at `/openapi/v1.json`. Both require a signed in administrator.
 
@@ -578,8 +592,8 @@ the OpenAPI description itself is at `/openapi/v1.json`. Both require a signed i
 | `GET /api/v1/events` | reads the transfer log |
 | `GET /api/v1/status` | state of the send service and the queues |
 
-A token created with *May change the configuration* can also set up connections, partners, identities and
-certificates, e.g. to import them from another AS2 server. The `PUT` endpoints create the record with the key in
+A token with the scope `Configuration` can also set up connections, partners, identities and certificates, e.g. to
+import them from another AS2 server. The `PUT` endpoints create the record with the key in
 the path or update it, so an import can run again; a property left out (or `null`) keeps its value.
 
 | Endpoint | Purpose |

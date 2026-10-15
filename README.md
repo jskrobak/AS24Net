@@ -155,6 +155,7 @@ its settings are kept, and its certificate is changed, in one place:
 | *Without MIME when not signed* | an encrypted message that is neither signed nor compressed carries the payload itself in the envelope, as Mendelson AS2 sends and expects it; such messages are read either way |
 | *MDN* | none, synchronous or asynchronous; *Request a signed MDN*; an asynchronous MDN that does not come within *minutes* makes the message go again |
 | *Must be signed*, *Must be encrypted* | messages of the partner that are not are refused with `insufficient-message-security` |
+| *MDN hosts* | hosts besides the one of the URL that the asynchronous MDN of an unsigned message may be posted to, for a partner that sends from another gateway than it receives at; without a signature nothing proves the message came from the partner, so its MDN goes nowhere else |
 | *Signature*, *Encryption*, *HTTPS server* certificates | the partner's certificates; the one it signed with before the last change is still accepted |
 | *HTTP user name / password*, *Timeout* | basic authentication and how long to wait for the answer (with a synchronous MDN, for the MDN) |
 | *Contacts* | people to call when the connection does not work, with e-mails and phones; listed with the partners by the REST API |
@@ -337,7 +338,7 @@ A message that cannot be processed gets an MDN with `processed/error:` and the r
 `authentication-failed`, `integrity-check-failed`, `decompression-failed`, `insufficient-message-security`,
 `unknown-trading-partner`, `unexpected-processing-error`) and is kept in *Received* with the error. Messages larger
 than *Largest message accepted* are refused with HTTP 413. An asynchronous MDN of a message whose signature was not
-verified is posted only to the host of the partner's URL.
+verified is posted only to the host of the partner's URL or to one of the *MDN hosts* of its connection.
 
 ### The URLs of a replaced system
 

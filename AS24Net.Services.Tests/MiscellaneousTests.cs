@@ -150,7 +150,34 @@ public class MiscellaneousTests
     {
         Assert.Equal(".", As2Sender.Excerpt([]));
         Assert.Equal(": Unknown message id", As2Sender.Excerpt("  Unknown message\r\nid\n"u8.ToArray()));
-        Assert.Equal(300 + 2, As2Sender.Excerpt(System.Text.Encoding.UTF8.GetBytes(new string('x', 1000))).Length);
+        Assert.Equal(": " + new string('x', 1000) + "…", As2Sender.Excerpt(System.Text.Encoding.UTF8.GetBytes(new string('x', 5000))));
+        Assert.Equal(".", As2Sender.Excerpt(" \r\n "u8.ToArray()));
+    }
+
+    [Fact]
+    public void Excerpt_KeepsOnlyTheTextOfAnHtmlErrorPage()
+    {
+        var page = """
+            <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en-US" lang="en-US">
+              <head><title>Error</title><style>body { color: red }</style></head>
+              <body bgcolor="#ffffff" text="#000000">
+                <table cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#F00B19"></table>
+                <br/><font face="Arial"><b>HTTP 400 &ndash; Bad Request</b></font>
+                <!-- internal -->
+                <p>Unknown original message &lt;d546e201@BIS&gt;</p>
+                <script>var x = 1;</script>
+              </body>
+            </html>
+            """;
+
+        Assert.Equal(": HTTP 400 – Bad Request Unknown original message <d546e201@BIS>",
+            As2Sender.Excerpt(System.Text.Encoding.UTF8.GetBytes(page)));
+    }
+
+    [Fact]
+    public void Excerpt_LeavesTextThatIsNotHtmlAsItIs()
+    {
+        Assert.Equal(": <AS2-From> is not known", As2Sender.Excerpt("<AS2-From> is not known"u8.ToArray()));
     }
 
     [Theory]

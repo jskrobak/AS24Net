@@ -145,6 +145,14 @@ public class MiscellaneousTests
         Assert.Equal("ALICE", mdn.Headers[As2Headers.As2To]);
     }
 
+    [Fact]
+    public void Excerpt_ShowsTheBeginningOfTheResponseOnOneLine()
+    {
+        Assert.Equal(".", As2Sender.Excerpt([]));
+        Assert.Equal(": Unknown message id", As2Sender.Excerpt("  Unknown message\r\nid\n"u8.ToArray()));
+        Assert.Equal(300 + 2, As2Sender.Excerpt(System.Text.Encoding.UTF8.GetBytes(new string('x', 1000))).Length);
+    }
+
     [Theory]
     [InlineData("https://as2.partner.com/mdn", "https://AS2.partner.com:8443/as2", null, true)]
     [InlineData("http://169.254.169.254/latest", "https://as2.partner.com/as2", null, false)]

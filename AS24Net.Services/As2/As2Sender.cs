@@ -291,7 +291,8 @@ public class As2Sender(
     internal static bool IsRetryable(HttpStatusCode status) => status is not (HttpStatusCode.BadRequest or HttpStatusCode.NotFound
         or HttpStatusCode.MethodNotAllowed or HttpStatusCode.RequestEntityTooLarge or HttpStatusCode.UnsupportedMediaType);
 
-    private static string Excerpt(byte[] body)
+    /// <summary>The beginning of a response body for an error text: <c>": …"</c>, or <c>"."</c> when it is empty.</summary>
+    internal static string Excerpt(byte[] body)
     {
         if (body.Length == 0)
             return ".";

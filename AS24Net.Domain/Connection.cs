@@ -59,6 +59,13 @@ public class Connection
     /// <summary>Messages of the partner must be encrypted.</summary>
     public bool RequireEncryptedMessages { get; set; }
 
+    /// <summary>
+    /// Hosts besides the one of <see cref="Url"/> that the asynchronous MDN of an unsigned message may be posted to,
+    /// separated by commas or spaces; for a partner that sends from another gateway than it receives at.
+    /// </summary>
+    [StringLength(500)]
+    public string? MdnHosts { get; set; }
+
     /// <summary>The partner's certificate its messages and MDNs are signed with.</summary>
     public int? SignatureCertificateId { get; set; }
     public Certificate? SignatureCertificate { get; set; }

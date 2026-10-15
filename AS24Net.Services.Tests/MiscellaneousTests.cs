@@ -146,11 +146,16 @@ public class MiscellaneousTests
     }
 
     [Theory]
-    [InlineData("https://as2.partner.com/mdn", "https://AS2.partner.com:8443/as2", true)]
-    [InlineData("http://169.254.169.254/latest", "https://as2.partner.com/as2", false)]
-    [InlineData(null, "https://as2.partner.com/as2", false)]
-    public void UnsignedMessages_GetTheirMdnOnlyAtThePartnersHost(string? mdnUrl, string partnerUrl, bool allowed)
+    [InlineData("https://as2.partner.com/mdn", "https://AS2.partner.com:8443/as2", null, true)]
+    [InlineData("http://169.254.169.254/latest", "https://as2.partner.com/as2", null, false)]
+    [InlineData(null, "https://as2.partner.com/as2", null, false)]
+    [InlineData("https://gateway.partner.net/as2_prod", "https://as2.partner.com/as2", "gateway.partner.net", true)]
+    [InlineData("https://GATEWAY.partner.net/as2_prod", "https://as2.partner.com/as2", "other.partner.net, gateway.partner.net", true)]
+    [InlineData("https://gateway.partner.net/as2_prod", "https://as2.partner.com/as2", "https://gateway.partner.net/as2_prod", true)]
+    [InlineData("https://gateway.partner.net.evil.com/", "https://as2.partner.com/as2", "gateway.partner.net", false)]
+    [InlineData("http://169.254.169.254/latest", "https://as2.partner.com/as2", "gateway.partner.net", false)]
+    public void UnsignedMessages_GetTheirMdnOnlyAtThePartnersHosts(string? mdnUrl, string partnerUrl, string? mdnHosts, bool allowed)
     {
-        Assert.Equal(allowed, AsyncMdnService.SameHost(mdnUrl, partnerUrl));
+        Assert.Equal(allowed, AsyncMdnService.IsPartnerHost(mdnUrl, new Connection { Url = partnerUrl, MdnHosts = mdnHosts }));
     }
 }

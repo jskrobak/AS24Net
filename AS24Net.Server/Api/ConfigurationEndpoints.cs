@@ -222,6 +222,7 @@ public class ConnectionRequest
     public int? MdnTimeoutMinutes { get; init; }
     public bool? RequireSignedMessages { get; init; }
     public bool? RequireEncryptedMessages { get; init; }
+    public string? MdnHosts { get; init; }
     public int? SignatureCertificateId { get; init; }
     public int? EncryptionCertificateId { get; init; }
     public int? TlsCertificateId { get; init; }
@@ -247,6 +248,7 @@ public class ConnectionRequest
         c.MdnTimeoutMinutes = MdnTimeoutMinutes ?? c.MdnTimeoutMinutes;
         c.RequireSignedMessages = RequireSignedMessages ?? c.RequireSignedMessages;
         c.RequireEncryptedMessages = RequireEncryptedMessages ?? c.RequireEncryptedMessages;
+        c.MdnHosts = MdnHosts is null ? c.MdnHosts : MdnHosts.Trim() is { Length: > 0 } hosts ? hosts : null;
         c.SignatureCertificateId = SignatureCertificateId ?? c.SignatureCertificateId;
         c.EncryptionCertificateId = EncryptionCertificateId ?? c.EncryptionCertificateId;
         c.TlsCertificateId = TlsCertificateId ?? c.TlsCertificateId;
@@ -264,13 +266,13 @@ public record IdentityRequest(string? Name, string? Description, string? Email, 
 
 public record ConnectionDto(int Id, string Name, string? Description, string Url, bool SignMessages, string SignatureAlgorithm,
     bool EncryptMessages, string EncryptionAlgorithm, bool CompressMessages, bool CompressBeforeSigning, bool UnsignedWithoutMime, string MdnMode,
-    bool RequestSignedMdn, int MdnTimeoutMinutes, bool RequireSignedMessages, bool RequireEncryptedMessages,
+    bool RequestSignedMdn, int MdnTimeoutMinutes, bool RequireSignedMessages, bool RequireEncryptedMessages, string? MdnHosts,
     int? SignatureCertificateId, int? PreviousSignatureCertificateId, int? EncryptionCertificateId, int? TlsCertificateId,
     string? HttpUserName, int TimeoutSeconds, IReadOnlyList<PartnerContact> Contacts, IReadOnlyList<string> PartnerAs2Ids)
 {
     public static ConnectionDto From(Connection c) => new(c.Id, c.Name, c.Description, c.Url, c.SignMessages, c.SignatureAlgorithm,
         c.EncryptMessages, c.EncryptionAlgorithm, c.CompressMessages, c.CompressBeforeSigning, c.UnsignedWithoutMime, c.MdnMode.ToString(), c.RequestSignedMdn,
-        c.MdnTimeoutMinutes, c.RequireSignedMessages, c.RequireEncryptedMessages, c.SignatureCertificateId,
+        c.MdnTimeoutMinutes, c.RequireSignedMessages, c.RequireEncryptedMessages, c.MdnHosts, c.SignatureCertificateId,
         c.PreviousSignatureCertificateId, c.EncryptionCertificateId, c.TlsCertificateId, c.HttpUserName, c.TimeoutSeconds,
         c.Contacts, c.Partners.Select(p => p.As2Id).Order(StringComparer.Ordinal).ToList());
 }

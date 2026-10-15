@@ -94,11 +94,11 @@ public class AsyncMdnService(
 
                 // Only a verified signature proves that the partner sent the message; otherwise anybody using its AS2
                 // name could make this server post to any address.
-                if (!message.Signed && !SameHost(message.MdnUrl, partner.Connection.Url))
+                if (!message.Signed && !IsPartnerHost(message.MdnUrl, partner.Connection))
                 {
                     message.MdnRetryCount = settings.MaxMdnRetryCount;
                     throw new InvalidOperationException(
-                        $"The message is not signed, so its MDN is posted only to the host of the partner's URL, not to {message.MdnUrl}.");
+                        $"The message is not signed, so its MDN is posted only to the host of the partner's URL or to the MDN hosts of the connection, not to {message.MdnUrl}.");
                 }
 
                 var mdn = BuildMdn(message, identity, partner, message.Status == ReceivedStatus.Failed ? message.Error : null);
@@ -165,9 +165,22 @@ public class AsyncMdnService(
         notifier.MdnSuppressed(message, error);
     }
 
-    internal static bool SameHost(string? url, string partnerUrl) =>
-        Uri.TryCreate(url, UriKind.Absolute, out var a) && Uri.TryCreate(partnerUrl, UriKind.Absolute, out var b)
-        && string.Equals(a.Host, b.Host, StringComparison.OrdinalIgnoreCase);
+    /// <summary>The URL is at the host of the partner's URL or at one of the MDN hosts of its connection.</summary>
+    internal static bool IsPartnerHost(string? url, Connection connection)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return false;
+        return SameHost(uri.Host, connection.Url) || ParseMdnHosts(connection.MdnHosts).Contains(uri.Host, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The MDN hosts of a connection; a URL given instead of a host stands for its host.</summary>
+    internal static IReadOnlyList<string> ParseMdnHosts(string? mdnHosts) =>
+        (mdnHosts ?? "").Split([',', ';', ' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(h => Uri.TryCreate(h, UriKind.Absolute, out var u) && u.Host.Length > 0 ? u.Host : h.TrimEnd('/'))
+            .ToList();
+
+    private static bool SameHost(string host, string partnerUrl) =>
+        Uri.TryCreate(partnerUrl, UriKind.Absolute, out var b) && string.Equals(host, b.Host, StringComparison.OrdinalIgnoreCase);
 
     private async Task PostAsync(Partner partner, string url, As2OutboundMdn mdn, CancellationToken cancellationToken)
     {

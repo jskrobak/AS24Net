@@ -52,6 +52,10 @@
     <div class="row g-2">
         <div class="col-md-6"><HxCheckbox Text="Must be signed" @bind-Value="@Connection.RequireSignedMessages" /></div>
         <div class="col-md-6"><HxCheckbox Text="Must be encrypted" @bind-Value="@Connection.RequireEncryptedMessages" /></div>
+        <div class="col-12">
+            <HxInputText Label="MDN hosts" @bind-Value="@Connection.MdnHosts"
+                         Hint="An asynchronous MDN of an unsigned message is posted only to the host of the URL above; further hosts it may go to, separated by commas (a partner that sends from another gateway than it receives at)." />
+        </div>
     </div>
 
     <h6 class="text-body-secondary mt-4">Certificates of the partner</h6>

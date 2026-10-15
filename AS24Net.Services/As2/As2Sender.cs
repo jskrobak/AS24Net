@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using System.Text.RegularExpressions;
 using Havit.Data.Patterns.UnitOfWorks;
 using Havit.Services.TimeServices;
 using Microsoft.EntityFrameworkCore;
@@ -291,14 +292,25 @@ public class As2Sender(
     internal static bool IsRetryable(HttpStatusCode status) => status is not (HttpStatusCode.BadRequest or HttpStatusCode.NotFound
         or HttpStatusCode.MethodNotAllowed or HttpStatusCode.RequestEntityTooLarge or HttpStatusCode.UnsupportedMediaType);
 
-    /// <summary>The beginning of a response body for an error text: <c>": …"</c>, or <c>"."</c> when it is empty.</summary>
+    /// <summary>
+    /// The beginning of a response body for an error text: <c>": …"</c>, or <c>"."</c> when it is empty. Of an HTML
+    /// page (the error page of a gateway) only the text is kept: its first characters are all markup otherwise.
+    /// </summary>
     internal static string Excerpt(byte[] body)
     {
-        if (body.Length == 0)
+        var text = System.Text.Encoding.UTF8.GetString(body, 0, Math.Min(body.Length, 64 * 1024));
+        if (HtmlStart.IsMatch(text))
+            text = WebUtility.HtmlDecode(HtmlTag.Replace(HtmlInvisible.Replace(text, " "), " "));
+        text = Whitespace.Replace(text, " ").Trim();
+        if (text.Length == 0)
             return ".";
-        var text = System.Text.Encoding.UTF8.GetString(body, 0, Math.Min(body.Length, 300)).ReplaceLineEndings(" ").Trim();
-        return $": {text}";
+        return text.Length <= 1000 ? $": {text}" : $": {text[..1000]}…";
     }
+
+    private static readonly Regex HtmlStart = new(@"^\s*(<\?xml[^>]*>\s*)?(<!doctype html|<html|<head|<body)", RegexOptions.IgnoreCase);
+    private static readonly Regex HtmlInvisible = new(@"<(script|style|head)\b.*?</\1\s*>|<!--.*?-->", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+    private static readonly Regex HtmlTag = new(@"<[^>]*>", RegexOptions.Singleline);
+    private static readonly Regex Whitespace = new(@"\s+");
 
     internal static string? HostOf(string? url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : null;

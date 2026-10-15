@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using Havit.Data.Patterns.UnitOfWorks;
 using Havit.Services.TimeServices;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using AS24Net.Core.As2;
 using AS24Net.DataLayer.Repositories;
@@ -42,7 +43,19 @@ public class As2Sender(
         try
         {
             var outcome = await TransferAsync(message, settings, cancellationToken);
-            await unitOfWork.CommitAsync(cancellationToken);
+            if (!await TryCommitAsync(message, cancellationToken))
+            {
+                // The asynchronous MDN came before the partner answered our POST and decided the message already.
+                if (message.Status is OutgoingStatus.Delivered or OutgoingStatus.NotDelivered)
+                {
+                    message.SentDate ??= timeService.GetCurrentTime();
+                    unitOfWork.AddForUpdate(message);
+                    await unitOfWork.CommitAsync(cancellationToken);
+                    notifier.MessageSent(message, stopwatch.ElapsedMilliseconds);
+                }
+
+                return;
+            }
 
             notifier.MessageSent(message, stopwatch.ElapsedMilliseconds);
             if (message.Status == OutgoingStatus.Delivered)
@@ -54,8 +67,27 @@ public class As2Sender(
         {
             var retry = ex is not As2TransferException { Retry: false };
             var error = ex is As2TransferException or HttpRequestException or TaskCanceledException ? ex.Message : ex.ToString();
-            await MarkFailedAsync(message, error, retry, settings, cancellationToken);
-            notifier.MessageSendFailed(message, error, message.Status == OutgoingStatus.Error, stopwatch.ElapsedMilliseconds);
+            if (await MarkFailedAsync(message, error, retry, settings, cancellationToken))
+                notifier.MessageSendFailed(message, error, message.Status == OutgoingStatus.Error, stopwatch.ElapsedMilliseconds);
+        }
+    }
+
+    /// <returns>
+    /// <c>false</c> when the message was changed meanwhile (by its asynchronous MDN, or in the administration); it is
+    /// read again then, without our changes.
+    /// </returns>
+    private async Task<bool> TryCommitAsync(OutgoingMessage message, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await unitOfWork.CommitAsync(cancellationToken);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await messageRepository.ReloadAsync(message, cancellationToken);
+            logger.LogInformation("{FileName} was changed while it was being sent, it is {Status} now", message.FileName, message.Status);
+            return false;
         }
     }
 
@@ -75,6 +107,14 @@ public class As2Sender(
         var payload = await File.ReadAllBytesAsync(message.FilePath, cancellationToken);
         var options = CreateOptions(message, partner, identity, payload, settings);
         var outbound = As2MessageBuilder.Build(options);
+
+        if (partner.Connection.MdnMode == MdnMode.Async)
+        {
+            // The asynchronous MDN may come before the partner answers our POST: it is checked against this MIC then.
+            SetTransferDetails(message, outbound, partner);
+            unitOfWork.AddForUpdate(message);
+            await unitOfWork.CommitAsync(cancellationToken);
+        }
 
         logger.LogInformation("Sending {FileName} ({Size} bytes) to {Partner} at {Url} as {MessageId}",
             message.FileName, payload.Length, partner.Name, partner.Connection.Url, outbound.MessageId);
@@ -109,11 +149,7 @@ public class As2Sender(
 
             var now = timeService.GetCurrentTime();
             message.SentDate = now;
-            message.Mic = outbound.Mic;
-            message.Signed = outbound.Signed;
-            message.Encrypted = outbound.Encrypted;
-            message.Compressed = outbound.Compressed;
-            message.MdnMode = partner.Connection.MdnMode;
+            SetTransferDetails(message, outbound, partner);
             message.LastError = null;
             message.Partner = partner;
             message.Identity = identity;
@@ -159,6 +195,15 @@ public class As2Sender(
             unitOfWork.AddForUpdate(message);
             return outcome;
         }
+    }
+
+    private static void SetTransferDetails(OutgoingMessage message, As2OutboundMessage outbound, Partner partner)
+    {
+        message.Mic = outbound.Mic;
+        message.Signed = outbound.Signed;
+        message.Encrypted = outbound.Encrypted;
+        message.Compressed = outbound.Compressed;
+        message.MdnMode = partner.Connection.MdnMode;
     }
 
     private static As2OutboundOptions CreateOptions(OutgoingMessage message, Partner partner, Identity identity, byte[] payload,
@@ -212,7 +257,8 @@ public class As2Sender(
         };
     }
 
-    private async Task MarkFailedAsync(OutgoingMessage message, string error, bool retry, GlobalSettings settings,
+    /// <returns><c>false</c> when the message was changed meanwhile, e.g. its asynchronous MDN came; the failure is not recorded then.</returns>
+    private async Task<bool> MarkFailedAsync(OutgoingMessage message, string error, bool retry, GlobalSettings settings,
         CancellationToken cancellationToken)
     {
         var now = timeService.GetCurrentTime();
@@ -234,7 +280,7 @@ public class As2Sender(
         }
 
         unitOfWork.AddForUpdate(message);
-        await unitOfWork.CommitAsync(cancellationToken);
+        return await TryCommitAsync(message, cancellationToken);
     }
 
     /// <summary>Exponential back-off: the first delay, twice as long for every further retry, at most the maximum.</summary>

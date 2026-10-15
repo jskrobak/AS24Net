@@ -436,6 +436,7 @@ namespace AS24Net.Entity.Migrations
                         .HasColumnType("bigint");
 
                     b.Property<string>("Status")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");

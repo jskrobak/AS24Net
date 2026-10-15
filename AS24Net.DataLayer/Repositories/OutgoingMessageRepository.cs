@@ -23,6 +23,8 @@ public class OutgoingMessageRepository(
     : DbRepository<OutgoingMessage, int>(dbContext, entityKeyAccessor, dataLoader, softDeleteManager, entityCacheManager,
         repositoryQueryProvider), IOutgoingMessageRepository
 {
+    private readonly IDbContext _dbContext = dbContext;
+
     public async Task<DataFragment<OutgoingMessage>> GetFragmentAsync(OutgoingMessageFilter filter, GridDataProviderRequest<OutgoingMessage> request,
         CancellationToken cancellationToken = default)
     {
@@ -78,6 +80,9 @@ public class OutgoingMessageRepository(
         .Include(m => m.Partner).ThenInclude(p => p.Connection)
         .Include(m => m.Identity)
         .FirstOrDefaultAsync(m => m.MessageId == messageId, cancellationToken);
+
+    public Task ReloadAsync(OutgoingMessage message, CancellationToken cancellationToken = default) =>
+        _dbContext.GetEntry(message, suppressDetectChanges: true).ReloadAsync(cancellationToken);
 
     public Task<List<OutgoingMessage>> GetAwaitingMdnAsync(CancellationToken cancellationToken = default) => Data
         .Where(m => m.Status == OutgoingStatus.Sent)

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Havit.Data.Patterns.UnitOfWorks;
 using Havit.Services.TimeServices;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -192,7 +193,6 @@ public class As2SendService(
             {
                 message.Status = OutgoingStatus.Error;
                 message.NextRetry = now;
-                logger.LogWarning("{FileName} to {Partner}: {Error} Sending it again.", message.FileName, message.Partner.Name, error);
             }
             else
             {
@@ -201,19 +201,32 @@ public class As2SendService(
             }
 
             unitOfWork.AddForUpdate(message);
-            await unitOfWork.CommitAsync(cancellationToken);
+            try
+            {
+                await unitOfWork.CommitAsync(cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // The MDN came just now.
+                await repository.ReloadAsync(message, cancellationToken);
+                continue;
+            }
 
             if (message.Status == OutgoingStatus.NotDelivered)
+            {
                 notifier.MessageNotDelivered(message, TransferEventType.MdnTimedOut, error);
-            else
-                notifier.Record(TransferEventCategory.Mdn, TransferEventType.MdnTimedOut, TransferEventLevel.Warning,
-                    $"{message.FileName} to {message.Partner.Name}: {error} It is sent again.", message.Partner,
-                    configure: e =>
-                    {
-                        e.MessageId = message.MessageId;
-                        e.FileName = message.FileName;
-                        e.OutgoingMessageId = message.Id;
-                    });
+                continue;
+            }
+
+            logger.LogWarning("{FileName} to {Partner}: {Error} Sending it again.", message.FileName, message.Partner.Name, error);
+            notifier.Record(TransferEventCategory.Mdn, TransferEventType.MdnTimedOut, TransferEventLevel.Warning,
+                $"{message.FileName} to {message.Partner.Name}: {error} It is sent again.", message.Partner,
+                configure: e =>
+                {
+                    e.MessageId = message.MessageId;
+                    e.FileName = message.FileName;
+                    e.OutgoingMessageId = message.Id;
+                });
         }
     }
 }

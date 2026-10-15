@@ -199,7 +199,11 @@ public class AsyncMdnService(
         using var client = httpClients.CreateClient(partner.Connection);
         using var response = await client.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
-            throw new HttpRequestException($"The partner answered HTTP {(int)response.StatusCode} {response.ReasonPhrase}.");
+        {
+            // What the partner says is often the only hint why it refuses the MDN.
+            var body = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+            throw new HttpRequestException($"The partner answered HTTP {(int)response.StatusCode} {response.ReasonPhrase}" + As2Sender.Excerpt(body));
+        }
     }
 
     /// <summary>

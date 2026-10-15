@@ -1,6 +1,7 @@
 using System.Text;
 using Havit.Data.Patterns.UnitOfWorks;
 using Havit.Services.TimeServices;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using AS24Net.Core.As2;
 using AS24Net.Core.Security;
@@ -273,6 +274,23 @@ public class As2InboundService(
             return As2Response.Text(404, $"The message {mdn.OriginalMessageId} is not known here.");
         }
 
+        // Our sender may save the message at the same time (the partner can post the MDN before it answers our
+        // POST); the MDN is then applied again to what the sender saved.
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await ApplyMdnAsync(message, partner, mdn, cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < 3)
+            {
+                await outgoingRepository.ReloadAsync(message, cancellationToken);
+            }
+        }
+    }
+
+    private async Task<As2Response> ApplyMdnAsync(OutgoingMessage message, Partner partner, Mdn mdn, CancellationToken cancellationToken)
+    {
         if (message.Status is OutgoingStatus.Delivered or OutgoingStatus.NotDelivered)
         {
             logger.LogInformation("MDN for {MessageId} received again, the message is {Status} already", message.MessageId, message.Status);

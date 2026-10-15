@@ -1,10 +1,13 @@
 <Project>
   <!-- All package versions are managed here to keep EF Core and ASP.NET Core assemblies consistent. -->
   <PropertyGroup>
-    <MicrosoftVersion>10.0.12</MicrosoftVersion>
+    <MicrosoftVersion>10.0.13</MicrosoftVersion>
+    <!-- The versions below apply to transitive dependencies too, e.g. System.Security.Cryptography.Pkcs pulled in by
+         Microsoft.Data.SqlClient (through Havit), so that no older version with known vulnerabilities slips in. -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="$(MicrosoftVersion)" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="$(MicrosoftVersion)" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="$(MicrosoftVersion)" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="$(MicrosoftVersion)" />

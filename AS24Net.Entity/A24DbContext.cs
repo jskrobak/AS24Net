@@ -94,7 +94,9 @@ public class A24DbContext(DbContextOptions options, IDataProtectionProvider? dat
             entity.HasKey(e => e.Id);
             entity.HasOne(e => e.Partner).WithMany().OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(e => e.Identity).WithMany().OnDelete(DeleteBehavior.Cascade);
-            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
+            // The sender and the asynchronous MDN may change a message at the same time (the MDN can come before the
+            // partner answers our POST): whoever saves second sees the change instead of overwriting it.
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(20).IsConcurrencyToken();
             entity.Property(e => e.MdnMode).HasConversion<string>().HasMaxLength(10);
             entity.HasIndex(e => e.MessageId).IsUnique();
             entity.HasIndex(e => new { e.Status, e.NextRetry });

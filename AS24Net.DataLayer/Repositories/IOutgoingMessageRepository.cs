@@ -26,6 +26,12 @@ public interface IOutgoingMessageRepository : IRepository<OutgoingMessage, int>
     /// <summary>The message an MDN belongs to.</summary>
     Task<OutgoingMessage?> FindByMessageIdAsync(string messageId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Reads the message from the database again, dropping its unsaved changes; after a save failed because somebody
+    /// else changed the message meanwhile.
+    /// </summary>
+    Task ReloadAsync(OutgoingMessage message, CancellationToken cancellationToken = default);
+
     /// <summary>Messages sent that wait for an asynchronous MDN, with their partner.</summary>
     Task<List<OutgoingMessage>> GetAwaitingMdnAsync(CancellationToken cancellationToken = default);
 

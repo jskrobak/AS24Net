@@ -44,6 +44,8 @@ zabbix_export:
               priority: HIGH
               description: 'Database, storage or the send service fails. The details are in the health check items.'
               tags:
+                - tag: service
+                  value: as2
                 - tag: scope
                   value: availability
             - uuid: b95d04e6579f4435b4a70e0e05368743
@@ -52,6 +54,8 @@ zabbix_export:
               priority: HIGH
               description: 'The server is down or cannot be reached; it cannot report anything itself.'
               tags:
+                - tag: service
+                  value: as2
                 - tag: scope
                   value: availability
         - uuid: 97faa901f80a4e8d9158697eb7d5c912
@@ -155,6 +159,8 @@ zabbix_export:
                 - name: 'AS24Net: Server does not answer for {$AS2.NODATA}'
                   expression: 'nodata(/AS24Net by HTTP/as2.health.ready,{$AS2.NODATA})=1'
               tags:
+                - tag: service
+                  value: as2
                 - tag: scope
                   value: availability
         - uuid: 0e8ab84a38ef456487d36d34e44519f2
@@ -307,6 +313,8 @@ zabbix_export:
               opdata: '{ITEM.LASTVALUE2}'
               priority: HIGH
               tags:
+                - tag: service
+                  value: as2
                 - tag: scope
                   value: availability
             - uuid: 83b2ea407bf04f89a81c5c9158a931c8
@@ -315,6 +323,8 @@ zabbix_export:
               opdata: '{ITEM.LASTVALUE2}'
               priority: WARNING
               tags:
+                - tag: service
+                  value: as2
                 - tag: scope
                   value: notice
         - uuid: 03a152320cc049189bce4ddcc5808e70
@@ -466,6 +476,8 @@ zabbix_export:
               priority: AVERAGE
               description: 'The partner cannot be reached or refuses the message; the send queue keeps retrying.'
               tags:
+                - tag: service
+                  value: as2
                 - tag: scope
                   value: notice
             - uuid: 678daa3ab958455b8e7555e8bdc70d53
@@ -476,6 +488,8 @@ zabbix_export:
               description: 'The retries are exhausted, the partner refused the message or returned a negative MDN. Send the message again or delete it in Messages / Outgoing.'
               manual_close: 'YES'
               tags:
+                - tag: service
+                  value: as2
                 - tag: scope
                   value: notice
             - uuid: 502610212f314bbf93cf10d4b517db13
@@ -485,6 +499,8 @@ zabbix_export:
               priority: WARNING
               description: 'The partner accepted the message but its asynchronous MDN has not arrived; when the MDN timeout of the connection passes, the message is sent again. Raise the threshold for partners that confirm late.'
               tags:
+                - tag: service
+                  value: as2
                 - tag: scope
                   value: notice
       tags:

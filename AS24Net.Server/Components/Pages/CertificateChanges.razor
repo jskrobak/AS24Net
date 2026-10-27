@@ -26,7 +26,9 @@
 
         <div class="mb-3">
             <label class="form-label" for="activateAt">Used from (time zone @AppTime.TimeZone.Id)</label>
-            <input id="activateAt" type="datetime-local" class="form-control" @bind="activateAt" @bind:format="yyyy-MM-ddTHH:mm" />
+            @* No @bind:format: Blazor sends the value of a datetime-local input with seconds and parses it in its own
+               format; one without seconds would refuse every change. *@
+            <input id="activateAt" type="datetime-local" class="form-control" @bind="activateAt" />
         </div>
 
         <HxRadioButtonList TItem="bool" TValue="bool" Label="Certificate" Data="sources" @bind-Value="uploadFile"

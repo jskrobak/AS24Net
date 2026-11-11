@@ -20,7 +20,7 @@ HTTP instead of OFTP2.
 - Duplicates recognised by their Message-ID (AS2 reliability): confirmed again, not stored again; messages whose
   asynchronous MDN does not come in time are sent again with the same Message-ID
 - Security requirements per partner: messages that are not signed or not encrypted can be refused
-  (`insufficient-message-security`)
+  (`insufficient-message-security`); file types a partner must not send (e.g. `pdf`, `xml`) refused with a negative MDN
 - Certificates of a partner uploaded in advance with the date and time from which they are used; the certificate
   it replaces is still accepted for signatures on their way, and the change is logged, run as a hook and reported by
   webhook
@@ -140,6 +140,7 @@ A **partner** is a remote AS2 station:
 | *Content type* | media type of the payload when a message names none, e.g. `application/edifact`, `application/edi-x12`, `application/xml` |
 | *Subject* | subject of our messages; the file name when empty |
 | *Our certificate* | our certificate (with the private key) used for this partner instead of the identity's: our messages and MDNs to it are signed with it and its messages are decrypted with it (the identity's certificates are tried too). For a partner that knows us by another certificate than the other partners of the identity, e.g. one that has not switched to our new certificate yet |
+| *Blocked file types* | file name extensions and media types refused from this partner, e.g. `pdf, xml, application/pdf`: such a message is not stored, the partner gets an MDN with `processed/error: unexpected-processing-error` and the reason, and it is kept in *Received* as failed. The extension is that of the file name the partner sent (`Content-Disposition`), or the one derived from the media type when it sent none |
 | *Enabled* | a disabled partner gets no messages and its messages are refused |
 
 A **connection** is the partner's server and what was agreed with it. Partners that differ only in their AS2 name

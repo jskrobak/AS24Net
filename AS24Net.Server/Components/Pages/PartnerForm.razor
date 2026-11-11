@@ -30,6 +30,11 @@
                       Data="OwnCertificates" @bind-Value="@Partner.OwnCertificateId"
                       TextSelector="@(c => $"{c.Name} (to {c.ValidTo:d})")" ValueSelector="@(c => (int?)c.Id)" Nullable="true" NullText="-the identity's-" />
         </div>
+        <div class="col-md-6">
+            <HxInputText Label="Blocked file types"
+                         Hint="Files of these types are refused with a negative MDN instead of being stored: extensions or media types, separated by commas, e.g. pdf, xml, application/pdf."
+                         @bind-Value="@Partner.BlockedFileTypes" InputCssClass="a24-code" />
+        </div>
         <div class="col-md-6"><HxCheckbox Label="Enabled" Text="Messages are sent to the partner and accepted from it" @bind-Value="@Partner.Enabled" /></div>
     </div>
 

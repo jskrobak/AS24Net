@@ -140,6 +140,16 @@ public class As2InboundService(
         }
 
         var fileName = string.IsNullOrWhiteSpace(inbound.FileName) ? DefaultFileName(messageId, inbound.ContentType) : inbound.FileName.Trim();
+        record.FileName = MdnEvaluation.Truncate(fileName, 250);
+
+        if (BlockedFileTypes.FindMatch(partner.BlockedFileTypes, fileName, inbound.ContentType) is { } blocked)
+        {
+            record.Size = inbound.Payload.Length;
+            return await RefuseAsync(record, partner, identity, As2Errors.UnexpectedProcessingError,
+                $"Files of type {blocked.TrimStart('.')} ({fileName}, {inbound.ContentType}) are not accepted from partner {partner.Name}.",
+                mdnRequest, allowAsync: true, cancellationToken);
+        }
+
         try
         {
             record.FilePath = await inbox.SaveAsync(partner.As2Id, fileName, inbound.Payload, cancellationToken);
@@ -151,7 +161,6 @@ public class As2InboundService(
                 "The message cannot be stored: " + ex.Message, mdnRequest, allowAsync: true, cancellationToken);
         }
 
-        record.FileName = MdnEvaluation.Truncate(fileName, 250);
         record.Size = inbound.Payload.Length;
         record.Status = ReceivedStatus.Received;
         logger.LogInformation("Message {MessageId} ({FileName}, {Size} bytes) received from {Partner} for {Identity}",

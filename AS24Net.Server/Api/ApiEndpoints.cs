@@ -474,10 +474,10 @@ public record ApiPage<T>(IReadOnlyList<T> Items, int TotalCount);
 
 public record PartnerDto(int Id, string Name, string As2Id, string Url, bool Enabled, string MdnMode, string Connection,
     string? Description, string? DefaultIdentityAs2Id, string ContentType, string? Subject, IReadOnlyList<PartnerContact> Contacts,
-    int? OwnCertificateId)
+    int? OwnCertificateId, string? BlockedFileTypes)
 {
     public static PartnerDto From(Partner p) => new(p.Id, p.Name, p.As2Id, p.Connection.Url, p.Enabled, p.Connection.MdnMode.ToString(),
-        p.Connection.Name, p.Description, p.DefaultIdentity?.As2Id, p.ContentType, p.Subject, p.Connection.Contacts, p.OwnCertificateId);
+        p.Connection.Name, p.Description, p.DefaultIdentity?.As2Id, p.ContentType, p.Subject, p.Connection.Contacts, p.OwnCertificateId, p.BlockedFileTypes);
 }
 
 public record IdentityDto(int Id, string Name, string As2Id);

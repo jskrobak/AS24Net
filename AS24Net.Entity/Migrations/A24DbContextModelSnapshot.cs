@@ -484,6 +484,10 @@ namespace AS24Net.Entity.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
+                    b.Property<string>("BlockedFileTypes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<int>("ConnectionId")
                         .HasColumnType("integer");
 

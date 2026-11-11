@@ -62,4 +62,11 @@ public class Partner
 
     [StringLength(200)]
     public string? Subject { get; set; }
+
+    /// <summary>
+    /// File types refused from this partner with a negative MDN instead of being stored, separated by commas or spaces:
+    /// file name extensions (pdf, .xml) and media types (application/pdf).
+    /// </summary>
+    [StringLength(500)]
+    public string? BlockedFileTypes { get; set; }
 }

@@ -148,6 +148,7 @@ public static class ConfigurationEndpoints
                 partner.Enabled = request.Enabled ?? partner.Enabled;
                 partner.ContentType = request.ContentType?.Trim() ?? partner.ContentType;
                 partner.Subject = request.Subject ?? partner.Subject;
+                partner.BlockedFileTypes = request.BlockedFileTypes ?? partner.BlockedFileTypes;
 
                 try
                 {
@@ -165,7 +166,8 @@ public static class ConfigurationEndpoints
             .WithSummary("Creates the partner with the AS2 name or updates it.")
             .WithDescription("connection is the name of the connection (required for a new partner); defaultIdentity the AS2 name of an " +
                              "identity, an empty string removes it; ownCertificateId the id from POST /certificates of our certificate (with " +
-                             "the private key) used for this partner instead of the identity's, 0 removes it.");
+                             "the private key) used for this partner instead of the identity's, 0 removes it; blockedFileTypes the extensions " +
+                             "and media types (e.g. \"pdf, xml\") refused with a negative MDN, an empty string removes them.");
 
         configuration.MapPut("/identities/{as2Id}", async (string as2Id, IdentityRequest request, IIdentityRepository identities,
                 IDataService dataService, CancellationToken cancellationToken) =>
@@ -260,7 +262,7 @@ public class ConnectionRequest
 }
 
 public record PartnerRequest(string? Name, string? Description, string? Connection, bool? Enabled, string? DefaultIdentity,
-    string? ContentType, string? Subject, int? OwnCertificateId = null);
+    string? ContentType, string? Subject, int? OwnCertificateId = null, string? BlockedFileTypes = null);
 
 public record IdentityRequest(string? Name, string? Description, string? Email, int? SigningCertificateId, int? DecryptionCertificateId);
 

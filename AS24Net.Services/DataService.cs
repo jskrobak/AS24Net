@@ -109,6 +109,9 @@ public class DataService(
             throw new InvalidOperationException("Select the connection the partner is reached through.");
         if ((await partnerRepository.GetAllAsync()).Any(p => p.Id != partner.Id && p.As2Id == partner.As2Id))
             throw new InvalidOperationException($"Another partner has the AS2 name {partner.As2Id}.");
+        partner.BlockedFileTypes = BlockedFileTypes.Normalize(partner.BlockedFileTypes);
+        if (partner.BlockedFileTypes?.Length > 500)
+            throw new InvalidOperationException("The blocked file types may have at most 500 characters.");
 
         if (partner.Id == 0)
             unitOfWork.AddForInsert(partner);
